@@ -17,10 +17,10 @@
 #include <vector>
 
 TEST(HttpServerNetworkTransportTests, BindNetwork) {
-    HttpNetworkTransport::HttpServerNetworkTransport transport;
     std::vector< std::shared_ptr< Http::Connection > > connections;
     std::condition_variable condition;
     std::mutex mutex;
+    HttpNetworkTransport::HttpServerNetworkTransport transport;
     ASSERT_TRUE(
         transport.BindNetwork(
             0,
@@ -152,7 +152,7 @@ TEST(HttpServerNetworkTransportTests, DataTransmissionFromClient) {
         ASSERT_TRUE(
             condition.wait_for(
                 lock,
-                std::chrono::seconds(100),
+                std::chrono::seconds(1),
                 [&dataReceived, &messageAsBytes]{
                     return (dataReceived.size() == messageAsBytes.size());
                 }
@@ -224,7 +224,80 @@ TEST(HttpServerNetworkTransportTests, DataTransmissionToClient) {
         ASSERT_TRUE(
             condition.wait_for(
                 lock,
-                std::chrono::seconds(100),
+                std::chrono::seconds(1),
+                [&dataReceived, &messageAsBytes]{
+                    return (dataReceived.size() == messageAsBytes.size());
+                }
+            )
+        );
+    }
+    ASSERT_EQ(messageAsBytes, dataReceived);
+}
+
+TEST(HttpServerNetworkTransportTests, DataReceivedShouldNotRaceConnectionDelegate) {
+    HttpNetworkTransport::HttpServerNetworkTransport transport;
+    std::vector< std::shared_ptr< Http::Connection > > connections;
+    std::condition_variable condition;
+    std::mutex mutex;
+    std::vector< uint8_t > dataReceived;
+    const auto dataReceivedDelegate = [&condition, &mutex, &dataReceived](
+        std::vector< uint8_t > data
+    ){
+        std::lock_guard< std::mutex > lock(mutex);
+        dataReceived.insert(
+            dataReceived.end(),
+            data.begin(),
+            data.end()
+        );
+        condition.notify_all();
+    };
+    ASSERT_TRUE(
+        transport.BindNetwork(
+            0,
+            [&connections, &condition, &mutex, dataReceivedDelegate](
+                std::shared_ptr< Http::Connection > connection
+            ){
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                std::lock_guard< std::mutex > lock(mutex);
+                connections.push_back(connection);
+                connection->SetDataReceivedDelegate(dataReceivedDelegate);
+                condition.notify_all();
+            }
+        )
+    );
+    const auto port = transport.GetBoundPort();
+    SystemAbstractions::NetworkConnection client;
+    (void)client.Connect(0x7F000001, port);
+    ASSERT_TRUE(
+        client.Process(
+            [](const std::vector< uint8_t >& message){
+            },
+            []{
+            }
+        )
+    );
+    const std::string messageAsString = "Hello, World!";
+    const std::vector< uint8_t > messageAsBytes(
+        messageAsString.begin(),
+        messageAsString.end()
+    );
+    client.SendMessage(messageAsBytes);
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        (void)condition.wait_for(
+            lock,
+            std::chrono::seconds(1),
+            [&connections]{
+                return !connections.empty();
+            }
+        );
+    }
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        ASSERT_TRUE(
+            condition.wait_for(
+                lock,
+                std::chrono::seconds(1),
                 [&dataReceived, &messageAsBytes]{
                     return (dataReceived.size() == messageAsBytes.size());
                 }

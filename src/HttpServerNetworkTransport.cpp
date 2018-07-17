@@ -139,10 +139,10 @@ namespace HttpNetworkTransport {
             ](std::shared_ptr< SystemAbstractions::NetworkConnection > newConnection){
                 const auto adapter = std::make_shared< ConnectionAdapter >();
                 adapter->adaptee = newConnection;
+                newConnectionDelegate(adapter);
                 if (!adapter->WireUpAdaptee()) {
                     return;
                 }
-                newConnectionDelegate(adapter);
             },
             [this](
                 uint32_t address,
