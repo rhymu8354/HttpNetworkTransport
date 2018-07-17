@@ -10,8 +10,10 @@
 #include <condition_variable>
 #include <gtest/gtest.h>
 #include <HttpNetworkTransport/HttpServerNetworkTransport.hpp>
+#include <inttypes.h>
 #include <mutex>
 #include <SystemAbstractions/NetworkConnection.hpp>
+#include <SystemAbstractions/StringExtensions.hpp>
 #include <vector>
 
 TEST(HttpServerNetworkTransportTests, BindNetwork) {
@@ -132,6 +134,13 @@ TEST(HttpServerNetworkTransportTests, DataTransmissionFromClient) {
             }
         );
     }
+    ASSERT_EQ(
+        SystemAbstractions::sprintf(
+            "127.0.0.1:%" PRIu16,
+            client.GetBoundPort()
+        ),
+        connections[0]->GetPeerId()
+    );
     const std::string messageAsString = "Hello, World!";
     const std::vector< uint8_t > messageAsBytes(
         messageAsString.begin(),
