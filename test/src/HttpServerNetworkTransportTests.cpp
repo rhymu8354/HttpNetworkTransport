@@ -14,6 +14,7 @@
 #include <mutex>
 #include <SystemAbstractions/NetworkConnection.hpp>
 #include <SystemAbstractions/StringExtensions.hpp>
+#include <thread>
 #include <vector>
 
 TEST(HttpServerNetworkTransportTests, BindNetwork) {
