@@ -91,7 +91,7 @@ namespace {
             brokenDelegate = newBrokenDelegate;
         }
 
-        virtual void SendData(std::vector< uint8_t > data) override {
+        virtual void SendData(const std::vector< uint8_t >& data) override {
             adaptee->SendMessage(data);
         }
 
