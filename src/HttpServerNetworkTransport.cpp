@@ -9,6 +9,7 @@
 
 #include <HttpNetworkTransport/HttpServerNetworkTransport.hpp>
 #include <inttypes.h>
+#include <mutex>
 #include <SystemAbstractions/NetworkEndpoint.hpp>
 #include <SystemAbstractions/StringExtensions.hpp>
 
@@ -26,6 +27,11 @@ namespace {
         : public Http::Connection
     {
         // Properties
+
+        /**
+         * This is used to synchronize access to the object.
+         */
+        std::recursive_mutex mutex;
 
         /**
          * This is the object which is implementing the network
@@ -58,11 +64,13 @@ namespace {
         bool WireUpAdaptee() {
             return adaptee->Process(
                 [this](const std::vector< uint8_t >& message){
+                    std::lock_guard< decltype(mutex) > lock(mutex);
                     if (dataReceivedDelegate != nullptr) {
                         dataReceivedDelegate(message);
                     }
                 },
                 [this]{
+                    std::lock_guard< decltype(mutex) > lock(mutex);
                     if (brokenDelegate != nullptr) {
                         brokenDelegate();
                     }
@@ -84,10 +92,12 @@ namespace {
         }
 
         virtual void SetDataReceivedDelegate(DataReceivedDelegate newDataReceivedDelegate) override {
+            std::lock_guard< decltype(mutex) > lock(mutex);
             dataReceivedDelegate = newDataReceivedDelegate;
         }
 
         virtual void SetBrokenDelegate(BrokenDelegate newBrokenDelegate) override {
+            std::lock_guard< decltype(mutex) > lock(mutex);
             brokenDelegate = newBrokenDelegate;
         }
 
