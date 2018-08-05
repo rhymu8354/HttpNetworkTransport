@@ -10,6 +10,7 @@
 #include <HttpNetworkTransport/HttpServerNetworkTransport.hpp>
 #include <inttypes.h>
 #include <mutex>
+#include <SystemAbstractions/DiagnosticsSender.hpp>
 #include <SystemAbstractions/NetworkEndpoint.hpp>
 #include <SystemAbstractions/StringExtensions.hpp>
 
@@ -57,22 +58,36 @@ namespace {
          * This method should be called once the adaptee is in place.
          * It fires up the actual network processing.
          *
+         * @param[in] weakSelf
+         *     This is a weak pointer to the adapter.  It's passed in
+         *     so that the delegates given to the adaptee can refer
+         *     back to the adapter even if the adaptee ends up living
+         *     longer than the adapter.
+         *
          * @return
          *     An indication of whether or not the method was
          *     successful is returned.
          */
-        bool WireUpAdaptee() {
+        bool WireUpAdaptee(std::weak_ptr< ConnectionAdapter > weakSelf) {
             return adaptee->Process(
-                [this](const std::vector< uint8_t >& message){
-                    std::lock_guard< decltype(mutex) > lock(mutex);
-                    if (dataReceivedDelegate != nullptr) {
-                        dataReceivedDelegate(message);
+                [weakSelf](const std::vector< uint8_t >& message){
+                    auto self = weakSelf.lock();
+                    if (self == nullptr) {
+                        return;
+                    }
+                    std::lock_guard< decltype(self->mutex) > lock(self->mutex);
+                    if (self->dataReceivedDelegate != nullptr) {
+                        self->dataReceivedDelegate(message);
                     }
                 },
-                [this]{
-                    std::lock_guard< decltype(mutex) > lock(mutex);
-                    if (brokenDelegate != nullptr) {
-                        brokenDelegate();
+                [weakSelf]{
+                    auto self = weakSelf.lock();
+                    if (self == nullptr) {
+                        return;
+                    }
+                    std::lock_guard< decltype(self->mutex) > lock(self->mutex);
+                    if (self->brokenDelegate != nullptr) {
+                        self->brokenDelegate();
                     }
                 }
             );
@@ -128,7 +143,21 @@ namespace HttpNetworkTransport {
          */
         SystemAbstractions::NetworkEndpoint endpoint;
 
+        /**
+         * This is a helper object used to generate and publish
+         * diagnostic messages.
+         */
+        std::shared_ptr< SystemAbstractions::DiagnosticsSender > diagnosticsSender;
+
         // Methods
+
+        /**
+         * This is the constructor for the structure.
+         */
+        Impl()
+            : diagnosticsSender(std::make_shared< SystemAbstractions::DiagnosticsSender >("HttpServerNetworkTransport"))
+        {
+        }
     };
 
     HttpServerNetworkTransport::~HttpServerNetworkTransport() = default;
@@ -136,6 +165,13 @@ namespace HttpNetworkTransport {
     HttpServerNetworkTransport::HttpServerNetworkTransport()
         : impl_(new Impl)
     {
+    }
+
+    SystemAbstractions::DiagnosticsSender::UnsubscribeDelegate HttpServerNetworkTransport::SubscribeToDiagnostics(
+        SystemAbstractions::DiagnosticsSender::DiagnosticMessageDelegate delegate,
+        size_t minLevel
+    ) {
+        return impl_->diagnosticsSender->SubscribeToDiagnostics(delegate, minLevel);
     }
 
     bool HttpServerNetworkTransport::BindNetwork(
@@ -149,8 +185,29 @@ namespace HttpNetworkTransport {
             ](std::shared_ptr< SystemAbstractions::NetworkConnection > newConnection){
                 const auto adapter = std::make_shared< ConnectionAdapter >();
                 adapter->adaptee = newConnection;
+                auto diagnosticsSender = impl_->diagnosticsSender;
+                const auto boundId = SystemAbstractions::sprintf(
+                    "%" PRIu8 ".%" PRIu8 ".%" PRIu8 ".%" PRIu8 ":%" PRIu16,
+                    (uint8_t)((adapter->adaptee->GetBoundAddress() >> 24) & 0xFF),
+                    (uint8_t)((adapter->adaptee->GetBoundAddress() >> 16) & 0xFF),
+                    (uint8_t)((adapter->adaptee->GetBoundAddress() >> 8) & 0xFF),
+                    (uint8_t)(adapter->adaptee->GetBoundAddress() & 0xFF),
+                    adapter->adaptee->GetBoundPort()
+                );
+                adapter->adaptee->SubscribeToDiagnostics(
+                    [diagnosticsSender, boundId](
+                        std::string senderName,
+                        size_t level,
+                        std::string message
+                    ){
+                        diagnosticsSender->SendDiagnosticInformationString(
+                            level,
+                            boundId + ": " + message
+                        );
+                    }
+                );
                 newConnectionDelegate(adapter);
-                if (!adapter->WireUpAdaptee()) {
+                if (!adapter->WireUpAdaptee(adapter)) {
                     return;
                 }
             },

@@ -17,11 +17,75 @@
 #include <thread>
 #include <vector>
 
-TEST(HttpServerNetworkTransportTests, BindNetwork) {
+/**
+ * This is the test fixture for these tests, providing common
+ * setup and teardown for each test.
+ */
+struct HttpServerNetworkTransportTests
+    : public ::testing::Test
+{
+    // Properties
+
+    /**
+     * This is the unit under test.
+     */
+    HttpNetworkTransport::HttpServerNetworkTransport transport;
+
+    /**
+     * This flag is used to tell the test fixture if we
+     * moved the unit under test.
+     */
+    bool transportWasMoved = false;
+
+    /**
+     * These are the diagnostic messages that have been
+     * received from the unit under test.
+     */
+    std::vector< std::string > diagnosticMessages;
+
+    /**
+     * This is the delegate obtained when subscribing
+     * to receive diagnostic messages from the unit under test.
+     * It's called to terminate the subscription.
+     */
+    SystemAbstractions::DiagnosticsSender::UnsubscribeDelegate diagnosticsUnsubscribeDelegate;
+
+    // Methods
+
+    // ::testing::Test
+
+    virtual void SetUp() {
+        diagnosticsUnsubscribeDelegate = transport.SubscribeToDiagnostics(
+            [this](
+                std::string senderName,
+                size_t level,
+                std::string message
+            ){
+                diagnosticMessages.push_back(
+                    SystemAbstractions::sprintf(
+                        "%s[%zu]: %s",
+                        senderName.c_str(),
+                        level,
+                        message.c_str()
+                    )
+                );
+            },
+            0
+        );
+    }
+
+    virtual void TearDown() {
+        if (!transportWasMoved) {
+            diagnosticsUnsubscribeDelegate();
+            transport.ReleaseNetwork();
+        }
+    }
+};
+
+TEST_F(HttpServerNetworkTransportTests, BindNetwork) {
     std::vector< std::shared_ptr< Http::Connection > > connections;
     std::condition_variable condition;
     std::mutex mutex;
-    HttpNetworkTransport::HttpServerNetworkTransport transport;
     ASSERT_TRUE(
         transport.BindNetwork(
             0,
@@ -56,8 +120,7 @@ TEST(HttpServerNetworkTransportTests, BindNetwork) {
     }
 }
 
-TEST(HttpServerNetworkTransportTests, ReleaseNetwork) {
-    HttpNetworkTransport::HttpServerNetworkTransport transport;
+TEST_F(HttpServerNetworkTransportTests, ReleaseNetwork) {
     std::vector< std::shared_ptr< Http::Connection > > connections;
     std::condition_variable condition;
     std::mutex mutex;
@@ -84,8 +147,7 @@ TEST(HttpServerNetworkTransportTests, ReleaseNetwork) {
     );
 }
 
-TEST(HttpServerNetworkTransportTests, DataTransmissionFromClient) {
-    HttpNetworkTransport::HttpServerNetworkTransport transport;
+TEST_F(HttpServerNetworkTransportTests, DataTransmissionFromClient) {
     std::vector< std::shared_ptr< Http::Connection > > connections;
     std::condition_variable condition;
     std::mutex mutex;
@@ -163,8 +225,7 @@ TEST(HttpServerNetworkTransportTests, DataTransmissionFromClient) {
     ASSERT_EQ(messageAsBytes, dataReceived);
 }
 
-TEST(HttpServerNetworkTransportTests, DataTransmissionToClient) {
-    HttpNetworkTransport::HttpServerNetworkTransport transport;
+TEST_F(HttpServerNetworkTransportTests, DataTransmissionToClient) {
     std::vector< std::shared_ptr< Http::Connection > > connections;
     std::condition_variable condition;
     std::mutex mutex;
@@ -235,8 +296,7 @@ TEST(HttpServerNetworkTransportTests, DataTransmissionToClient) {
     ASSERT_EQ(messageAsBytes, dataReceived);
 }
 
-TEST(HttpServerNetworkTransportTests, DataReceivedShouldNotRaceConnectionDelegate) {
-    HttpNetworkTransport::HttpServerNetworkTransport transport;
+TEST_F(HttpServerNetworkTransportTests, DataReceivedShouldNotRaceConnectionDelegate) {
     std::vector< std::shared_ptr< Http::Connection > > connections;
     std::condition_variable condition;
     std::mutex mutex;
@@ -306,4 +366,80 @@ TEST(HttpServerNetworkTransportTests, DataReceivedShouldNotRaceConnectionDelegat
         );
     }
     ASSERT_EQ(messageAsBytes, dataReceived);
+}
+
+TEST_F(HttpServerNetworkTransportTests, ClientBroken) {
+    std::vector< std::shared_ptr< Http::Connection > > connections;
+    std::condition_variable condition;
+    std::mutex mutex;
+    bool broken = false;
+    const auto brokenDelegate = [&condition, &mutex, &broken]{
+        std::lock_guard< std::mutex > lock(mutex);
+        broken = true;
+        condition.notify_all();
+    };
+    ASSERT_TRUE(
+        transport.BindNetwork(
+            0,
+            [&connections, &condition, &mutex, brokenDelegate](
+                std::shared_ptr< Http::Connection > connection
+            ){
+                std::lock_guard< std::mutex > lock(mutex);
+                connections.push_back(connection);
+                connection->SetBrokenDelegate(brokenDelegate);
+                condition.notify_all();
+            }
+        )
+    );
+    const auto port = transport.GetBoundPort();
+    SystemAbstractions::NetworkConnection client;
+    (void)client.Connect(0x7F000001, port);
+    ASSERT_TRUE(
+        client.Process(
+            [](const std::vector< uint8_t >& message){
+            },
+            []{
+            }
+        )
+    );
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        (void)condition.wait_for(
+            lock,
+            std::chrono::seconds(1),
+            [&connections]{
+                return !connections.empty();
+            }
+        );
+    }
+    diagnosticMessages.clear();
+    connections[0]->Break(false);
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        ASSERT_TRUE(
+            condition.wait_for(
+                lock,
+                std::chrono::seconds(1),
+                [&broken]{ return broken; }
+            )
+        );
+    }
+    const auto serverSideId = SystemAbstractions::sprintf(
+        "127.0.0.1:%" PRIu16,
+        port
+    );
+    const auto clientSideId = SystemAbstractions::sprintf(
+        "127.0.0.1:%" PRIu16,
+        client.GetBoundPort()
+    );
+    ASSERT_EQ(
+        (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpServerNetworkTransport[0]: %s: closing connection with %s",
+                serverSideId.c_str(),
+                clientSideId.c_str()
+            ),
+        }),
+        diagnosticMessages
+    );
 }
