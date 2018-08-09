@@ -25,11 +25,11 @@ namespace HttpNetworkTransport {
     {
         // Lifecycle management
     public:
-        ~HttpServerNetworkTransport();
+        ~HttpServerNetworkTransport() noexcept;
         HttpServerNetworkTransport(const HttpServerNetworkTransport&) = delete;
-        HttpServerNetworkTransport(HttpServerNetworkTransport&&) = delete;
+        HttpServerNetworkTransport(HttpServerNetworkTransport&&) noexcept = delete;
         HttpServerNetworkTransport& operator=(const HttpServerNetworkTransport&) = delete;
-        HttpServerNetworkTransport& operator=(HttpServerNetworkTransport&&) = delete;
+        HttpServerNetworkTransport& operator=(HttpServerNetworkTransport&&) noexcept = delete;
 
         // Public methods
     public:
