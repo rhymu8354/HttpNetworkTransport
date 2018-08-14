@@ -413,7 +413,7 @@ TEST_F(HttpServerNetworkTransportTests, ClientBroken) {
         );
     }
     diagnosticMessages.clear();
-    connections[0]->Break(false);
+    client.Close(false);
     {
         std::unique_lock< std::mutex > lock(mutex);
         ASSERT_TRUE(
@@ -432,6 +432,18 @@ TEST_F(HttpServerNetworkTransportTests, ClientBroken) {
         "127.0.0.1:%" PRIu16,
         client.GetBoundPort()
     );
+    ASSERT_EQ(
+        (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpServerNetworkTransport[0]: %s: connection with %s closed by peer",
+                serverSideId.c_str(),
+                clientSideId.c_str()
+            ),
+        }),
+        diagnosticMessages
+    );
+    diagnosticMessages.clear();
+    connections[0]->Break(false);
     ASSERT_EQ(
         (std::vector< std::string >{
             SystemAbstractions::sprintf(
