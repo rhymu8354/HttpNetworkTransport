@@ -435,7 +435,7 @@ TEST_F(HttpServerNetworkTransportTests, ClientBroken) {
     ASSERT_EQ(
         (std::vector< std::string >{
             SystemAbstractions::sprintf(
-                "HttpServerNetworkTransport[0]: %s: closing connection with %s",
+                "HttpServerNetworkTransport[0]: %s: closed connection with %s",
                 serverSideId.c_str(),
                 clientSideId.c_str()
             ),
