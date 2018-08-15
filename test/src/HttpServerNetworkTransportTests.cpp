@@ -50,6 +50,12 @@ struct HttpServerNetworkTransportTests
      */
     SystemAbstractions::DiagnosticsSender::UnsubscribeDelegate diagnosticsUnsubscribeDelegate;
 
+    /**
+     * If this flag is set, we will print all received diagnostic
+     * messages, in addition to storing them.
+     */
+    bool printDiagnosticMessages = false;
+
     // Methods
 
     // ::testing::Test
@@ -69,6 +75,14 @@ struct HttpServerNetworkTransportTests
                         message.c_str()
                     )
                 );
+                if (printDiagnosticMessages) {
+                    printf(
+                        "%s[%zu]: %s\n",
+                        senderName.c_str(),
+                        level,
+                        message.c_str()
+                    );
+                }
             },
             0
         );
@@ -363,7 +377,7 @@ TEST_F(HttpServerNetworkTransportTests, DataReceivedShouldNotRaceConnectionDeleg
     ASSERT_EQ(messageAsBytes, dataReceived);
 }
 
-TEST_F(HttpServerNetworkTransportTests, ClientBroken) {
+TEST_F(HttpServerNetworkTransportTests, ClientBrokenAbruptly) {
     std::vector< std::shared_ptr< Http::Connection > > connections;
     std::condition_variable condition;
     std::mutex mutex;
@@ -428,7 +442,86 @@ TEST_F(HttpServerNetworkTransportTests, ClientBroken) {
     ASSERT_EQ(
         (std::vector< std::string >{
             SystemAbstractions::sprintf(
-                "HttpServerNetworkTransport[1]: %s: connection with %s closed by peer",
+                "HttpServerNetworkTransport[1]: %s: connection with %s closed abruptly by peer",
+                serverSideId.c_str(),
+                clientSideId.c_str()
+            ),
+            SystemAbstractions::sprintf(
+                "HttpServerNetworkTransport[1]: %s: closed connection with %s",
+                serverSideId.c_str(),
+                clientSideId.c_str()
+            ),
+        }),
+        diagnosticMessages
+    );
+}
+
+TEST_F(HttpServerNetworkTransportTests, ClientBrokenGracefully) {
+    std::vector< std::shared_ptr< Http::Connection > > connections;
+    std::condition_variable condition;
+    std::mutex mutex;
+    bool broken = false;
+    const auto brokenDelegate = [&condition, &mutex, &broken](bool){
+        std::lock_guard< std::mutex > lock(mutex);
+        broken = true;
+        condition.notify_all();
+    };
+    ASSERT_TRUE(
+        transport.BindNetwork(
+            0,
+            [&connections, &condition, &mutex, brokenDelegate](
+                std::shared_ptr< Http::Connection > connection
+            ){
+                std::lock_guard< std::mutex > lock(mutex);
+                connections.push_back(connection);
+                connection->SetBrokenDelegate(brokenDelegate);
+                condition.notify_all();
+            }
+        )
+    );
+    const auto port = transport.GetBoundPort();
+    SystemAbstractions::NetworkConnection client;
+    (void)client.Connect(0x7F000001, port);
+    ASSERT_TRUE(
+        client.Process(
+            [](const std::vector< uint8_t >& message){},
+            [](bool){}
+        )
+    );
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        (void)condition.wait_for(
+            lock,
+            std::chrono::seconds(1),
+            [&connections]{
+                return !connections.empty();
+            }
+        );
+    }
+    diagnosticMessages.clear();
+    client.Close(true);
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        ASSERT_TRUE(
+            condition.wait_for(
+                lock,
+                std::chrono::seconds(10),
+                [&broken]{ return broken; }
+            )
+        );
+    }
+    const auto serverSideId = SystemAbstractions::sprintf(
+        "127.0.0.1:%" PRIu16,
+        port
+    );
+    const auto clientSideId = SystemAbstractions::sprintf(
+        "127.0.0.1:%" PRIu16,
+        client.GetBoundPort()
+    );
+    ASSERT_EQ(
+        (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpServerNetworkTransport[1]: %s: connection with %s closed gracefully by peer",
                 serverSideId.c_str(),
                 clientSideId.c_str()
             ),
