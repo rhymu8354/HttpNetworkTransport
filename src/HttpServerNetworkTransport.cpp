@@ -207,9 +207,20 @@ namespace HttpNetworkTransport {
                     },
                     1
                 );
-                newConnectionDelegate(adapter);
+                /*
+                 * NOTE: It's important to announce the new connection first,
+                 * before wiring up the adaptee, so that the new connection
+                 * delegate has the opportunity to register its delegates
+                 * before the adapter receives callbacks from the adaptee.
+                 * Otherwise, callbacks may be lost, if they happen before
+                 * the new connection delegate registers to receive them.
+                 */
+                const auto readyDelegate = newConnectionDelegate(adapter);
                 if (!adapter->WireUpAdaptee(adapter)) {
                     return;
+                }
+                if (readyDelegate != nullptr) {
+                    readyDelegate();
                 }
             },
             [this](

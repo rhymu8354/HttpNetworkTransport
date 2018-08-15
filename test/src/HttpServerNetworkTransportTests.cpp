@@ -109,6 +109,7 @@ TEST_F(HttpServerNetworkTransportTests, BindNetwork) {
                 std::lock_guard< std::mutex > lock(mutex);
                 connections.push_back(connection);
                 condition.notify_all();
+                return nullptr;
             }
         )
     );
@@ -147,6 +148,7 @@ TEST_F(HttpServerNetworkTransportTests, ReleaseNetwork) {
                 std::lock_guard< std::mutex > lock(mutex);
                 connections.push_back(connection);
                 condition.notify_all();
+                return nullptr;
             }
         )
     );
@@ -187,6 +189,7 @@ TEST_F(HttpServerNetworkTransportTests, DataTransmissionFromClient) {
                 connections.push_back(connection);
                 connection->SetDataReceivedDelegate(dataReceivedDelegate);
                 condition.notify_all();
+                return nullptr;
             }
         )
     );
@@ -256,6 +259,7 @@ TEST_F(HttpServerNetworkTransportTests, DataTransmissionToClient) {
                 connections.push_back(connection);
                 connection->SetDataReceivedDelegate(dataReceivedDelegate);
                 condition.notify_all();
+                return nullptr;
             }
         )
     );
@@ -334,6 +338,7 @@ TEST_F(HttpServerNetworkTransportTests, DataReceivedShouldNotRaceConnectionDeleg
                 connections.push_back(connection);
                 connection->SetDataReceivedDelegate(dataReceivedDelegate);
                 condition.notify_all();
+                return nullptr;
             }
         )
     );
@@ -397,6 +402,7 @@ TEST_F(HttpServerNetworkTransportTests, ClientBrokenAbruptly) {
                 connections.push_back(connection);
                 connection->SetBrokenDelegate(brokenDelegate);
                 condition.notify_all();
+                return nullptr;
             }
         )
     );
@@ -476,6 +482,7 @@ TEST_F(HttpServerNetworkTransportTests, ClientBrokenGracefully) {
                 connections.push_back(connection);
                 connection->SetBrokenDelegate(brokenDelegate);
                 condition.notify_all();
+                return nullptr;
             }
         )
     );
@@ -530,6 +537,88 @@ TEST_F(HttpServerNetworkTransportTests, ClientBrokenGracefully) {
     );
     diagnosticMessages.clear();
     connections[0]->Break(false);
+    ASSERT_EQ(
+        (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpServerNetworkTransport[1]: %s: closed connection with %s",
+                serverSideId.c_str(),
+                clientSideId.c_str()
+            ),
+        }),
+        diagnosticMessages
+    );
+}
+
+TEST_F(HttpServerNetworkTransportTests, ServerBrokenAbruptly) {
+    std::vector< std::shared_ptr< Http::Connection > > connections;
+    std::condition_variable condition;
+    std::mutex mutex;
+    bool connectionReady = false;
+    ASSERT_TRUE(
+        transport.BindNetwork(
+            0,
+            [&connections, &condition, &mutex, &connectionReady](
+                std::shared_ptr< Http::Connection > connection
+            ){
+                std::lock_guard< std::mutex > lock(mutex);
+                connections.push_back(connection);
+                condition.notify_all();
+                return [&connections, &condition, &mutex, &connectionReady]{
+                    std::lock_guard< std::mutex > lock(mutex);
+                    connectionReady = true;
+                    condition.notify_all();
+                };
+            }
+        )
+    );
+    const auto port = transport.GetBoundPort();
+    SystemAbstractions::NetworkConnection client;
+    (void)client.Connect(0x7F000001, port);
+    bool broken = false;
+    bool brokenGracefully = false;
+    const auto brokenDelegate = [&condition, &mutex, &broken, &brokenGracefully](bool graceful){
+        std::lock_guard< std::mutex > lock(mutex);
+        broken = true;
+        brokenGracefully = graceful;
+        condition.notify_all();
+    };
+    ASSERT_TRUE(
+        client.Process(
+            [](const std::vector< uint8_t >& message){},
+            brokenDelegate
+        )
+    );
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        (void)condition.wait_for(
+            lock,
+            std::chrono::seconds(1),
+            [&connectionReady]{
+                return connectionReady;
+            }
+        );
+    }
+    diagnosticMessages.clear();
+    connections[0]->Break(false);
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        ASSERT_TRUE(
+            condition.wait_for(
+                lock,
+                std::chrono::seconds(1),
+                [&broken]{ return broken; }
+            )
+        );
+    }
+    EXPECT_FALSE(brokenGracefully);
+    const auto serverSideId = SystemAbstractions::sprintf(
+        "127.0.0.1:%" PRIu16,
+        port
+    );
+    const auto clientSideId = SystemAbstractions::sprintf(
+        "127.0.0.1:%" PRIu16,
+        client.GetBoundPort()
+    );
     ASSERT_EQ(
         (std::vector< std::string >{
             SystemAbstractions::sprintf(
