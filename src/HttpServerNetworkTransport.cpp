@@ -80,14 +80,14 @@ namespace {
                         self->dataReceivedDelegate(message);
                     }
                 },
-                [weakSelf]{
+                [weakSelf](bool graceful){
                     auto self = weakSelf.lock();
                     if (self == nullptr) {
                         return;
                     }
                     std::lock_guard< decltype(self->mutex) > lock(self->mutex);
                     if (self->brokenDelegate != nullptr) {
-                        self->brokenDelegate();
+                        self->brokenDelegate(graceful);
                     }
                 }
             );

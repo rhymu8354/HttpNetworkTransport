@@ -181,10 +181,8 @@ TEST_F(HttpServerNetworkTransportTests, DataTransmissionFromClient) {
     (void)client.Connect(0x7F000001, port);
     ASSERT_TRUE(
         client.Process(
-            [](const std::vector< uint8_t >& message){
-            },
-            []{
-            }
+            [](const std::vector< uint8_t >& message){},
+            [](bool){}
         )
     );
     {
@@ -261,8 +259,7 @@ TEST_F(HttpServerNetworkTransportTests, DataTransmissionToClient) {
                 );
                 condition.notify_all();
             },
-            []{
-            }
+            [](bool){}
         )
     );
     {
@@ -331,10 +328,8 @@ TEST_F(HttpServerNetworkTransportTests, DataReceivedShouldNotRaceConnectionDeleg
     (void)client.Connect(0x7F000001, port);
     ASSERT_TRUE(
         client.Process(
-            [](const std::vector< uint8_t >& message){
-            },
-            []{
-            }
+            [](const std::vector< uint8_t >& message){},
+            [](bool){}
         )
     );
     const std::string messageAsString = "Hello, World!";
@@ -373,7 +368,7 @@ TEST_F(HttpServerNetworkTransportTests, ClientBroken) {
     std::condition_variable condition;
     std::mutex mutex;
     bool broken = false;
-    const auto brokenDelegate = [&condition, &mutex, &broken]{
+    const auto brokenDelegate = [&condition, &mutex, &broken](bool){
         std::lock_guard< std::mutex > lock(mutex);
         broken = true;
         condition.notify_all();
@@ -396,10 +391,8 @@ TEST_F(HttpServerNetworkTransportTests, ClientBroken) {
     (void)client.Connect(0x7F000001, port);
     ASSERT_TRUE(
         client.Process(
-            [](const std::vector< uint8_t >& message){
-            },
-            []{
-            }
+            [](const std::vector< uint8_t >& message){},
+            [](bool){}
         )
     );
     {
