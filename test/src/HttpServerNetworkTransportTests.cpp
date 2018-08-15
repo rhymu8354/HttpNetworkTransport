@@ -428,7 +428,7 @@ TEST_F(HttpServerNetworkTransportTests, ClientBroken) {
     ASSERT_EQ(
         (std::vector< std::string >{
             SystemAbstractions::sprintf(
-                "HttpServerNetworkTransport[0]: %s: connection with %s closed by peer",
+                "HttpServerNetworkTransport[1]: %s: connection with %s closed by peer",
                 serverSideId.c_str(),
                 clientSideId.c_str()
             ),
@@ -440,7 +440,7 @@ TEST_F(HttpServerNetworkTransportTests, ClientBroken) {
     ASSERT_EQ(
         (std::vector< std::string >{
             SystemAbstractions::sprintf(
-                "HttpServerNetworkTransport[0]: %s: closed connection with %s",
+                "HttpServerNetworkTransport[1]: %s: closed connection with %s",
                 serverSideId.c_str(),
                 clientSideId.c_str()
             ),

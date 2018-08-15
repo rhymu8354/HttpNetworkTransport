@@ -204,7 +204,8 @@ namespace HttpNetworkTransport {
                             level,
                             boundId + ": " + message
                         );
-                    }
+                    },
+                    1
                 );
                 newConnectionDelegate(adapter);
                 if (!adapter->WireUpAdaptee(adapter)) {
