@@ -121,9 +121,7 @@ namespace {
         }
 
         virtual void Break(bool clean) override {
-            // TODO: If clean == true, we may need to hold off until adaptee
-            // has written out all its data.
-            adaptee->Close();
+            adaptee->Close(clean);
         }
     };
 

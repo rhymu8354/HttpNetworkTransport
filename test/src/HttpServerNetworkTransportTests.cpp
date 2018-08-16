@@ -630,3 +630,238 @@ TEST_F(HttpServerNetworkTransportTests, ServerBrokenAbruptly) {
         diagnosticMessages
     );
 }
+
+TEST_F(HttpServerNetworkTransportTests, ServerBrokenGracefullyClientClosesGracefully) {
+    std::vector< std::shared_ptr< Http::Connection > > connections;
+    std::condition_variable condition;
+    std::mutex mutex;
+    bool connectionReady = false;
+    std::vector< bool > serverBreaks;
+    const auto serverBrokenDelegate = [&condition, &mutex, &serverBreaks](bool graceful){
+        std::lock_guard< std::mutex > lock(mutex);
+        serverBreaks.push_back(graceful);
+        condition.notify_all();
+    };
+    ASSERT_TRUE(
+        transport.BindNetwork(
+            0,
+            [&connections, &condition, &mutex, &connectionReady, serverBrokenDelegate](
+                std::shared_ptr< Http::Connection > connection
+            ){
+                std::lock_guard< std::mutex > lock(mutex);
+                connections.push_back(connection);
+                condition.notify_all();
+                connection->SetBrokenDelegate(serverBrokenDelegate);
+                return [&connections, &condition, &mutex, &connectionReady]{
+                    std::lock_guard< std::mutex > lock(mutex);
+                    connectionReady = true;
+                    condition.notify_all();
+                };
+            }
+        )
+    );
+    const auto port = transport.GetBoundPort();
+    SystemAbstractions::NetworkConnection client;
+    (void)client.Connect(0x7F000001, port);
+    bool clientBroken = false;
+    bool clientBrokenGracefully = false;
+    const auto clientBrokenDelegate = [&condition, &mutex, &clientBroken, &clientBrokenGracefully](bool graceful){
+        std::lock_guard< std::mutex > lock(mutex);
+        clientBroken = true;
+        clientBrokenGracefully = graceful;
+        condition.notify_all();
+    };
+    ASSERT_TRUE(
+        client.Process(
+            [](const std::vector< uint8_t >& message){},
+            clientBrokenDelegate
+        )
+    );
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        (void)condition.wait_for(
+            lock,
+            std::chrono::seconds(1),
+            [&connectionReady]{
+                return connectionReady;
+            }
+        );
+    }
+    diagnosticMessages.clear();
+    connections[0]->Break(true);
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        ASSERT_TRUE(
+            condition.wait_for(
+                lock,
+                std::chrono::seconds(1),
+                [&clientBroken]{ return clientBroken; }
+            )
+        );
+    }
+    EXPECT_TRUE(clientBrokenGracefully);
+    const auto serverSideId = SystemAbstractions::sprintf(
+        "127.0.0.1:%" PRIu16,
+        port
+    );
+    const auto clientSideId = SystemAbstractions::sprintf(
+        "127.0.0.1:%" PRIu16,
+        client.GetBoundPort()
+    );
+    ASSERT_EQ(
+        (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpServerNetworkTransport[1]: %s: closing connection with %s",
+                serverSideId.c_str(),
+                clientSideId.c_str()
+            ),
+        }),
+        diagnosticMessages
+    );
+    diagnosticMessages.clear();
+    client.Close(true);
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        ASSERT_TRUE(
+            condition.wait_for(
+                lock,
+                std::chrono::seconds(1),
+                [&serverBreaks]{ return (serverBreaks.size() == 2); }
+            )
+        );
+        EXPECT_TRUE(serverBreaks[0]);
+        EXPECT_FALSE(serverBreaks[1]);
+    }
+    ASSERT_EQ(
+        (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpServerNetworkTransport[1]: %s: connection with %s closed gracefully by peer",
+                serverSideId.c_str(),
+                clientSideId.c_str()
+            ),
+            SystemAbstractions::sprintf(
+                "HttpServerNetworkTransport[1]: %s: closed connection with %s",
+                serverSideId.c_str(),
+                clientSideId.c_str()
+            ),
+        }),
+        diagnosticMessages
+    );
+}
+
+TEST_F(HttpServerNetworkTransportTests, ServerBrokenGracefullyClientClosesAbruptly) {
+    std::vector< std::shared_ptr< Http::Connection > > connections;
+    std::condition_variable condition;
+    std::mutex mutex;
+    bool connectionReady = false;
+    std::vector< bool > serverBreaks;
+    const auto serverBrokenDelegate = [&condition, &mutex, &serverBreaks](bool graceful){
+        std::lock_guard< std::mutex > lock(mutex);
+        serverBreaks.push_back(graceful);
+        condition.notify_all();
+    };
+    ASSERT_TRUE(
+        transport.BindNetwork(
+            0,
+            [&connections, &condition, &mutex, &connectionReady, serverBrokenDelegate](
+                std::shared_ptr< Http::Connection > connection
+            ){
+                std::lock_guard< std::mutex > lock(mutex);
+                connections.push_back(connection);
+                condition.notify_all();
+                connection->SetBrokenDelegate(serverBrokenDelegate);
+                return [&connections, &condition, &mutex, &connectionReady]{
+                    std::lock_guard< std::mutex > lock(mutex);
+                    connectionReady = true;
+                    condition.notify_all();
+                };
+            }
+        )
+    );
+    const auto port = transport.GetBoundPort();
+    SystemAbstractions::NetworkConnection client;
+    (void)client.Connect(0x7F000001, port);
+    bool clientBroken = false;
+    bool clientBrokenGracefully = false;
+    const auto clientBrokenDelegate = [&condition, &mutex, &clientBroken, &clientBrokenGracefully](bool graceful){
+        std::lock_guard< std::mutex > lock(mutex);
+        clientBroken = true;
+        clientBrokenGracefully = graceful;
+        condition.notify_all();
+    };
+    ASSERT_TRUE(
+        client.Process(
+            [](const std::vector< uint8_t >& message){},
+            clientBrokenDelegate
+        )
+    );
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        (void)condition.wait_for(
+            lock,
+            std::chrono::seconds(1),
+            [&connectionReady]{
+                return connectionReady;
+            }
+        );
+    }
+    diagnosticMessages.clear();
+    connections[0]->Break(true);
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        ASSERT_TRUE(
+            condition.wait_for(
+                lock,
+                std::chrono::seconds(1),
+                [&clientBroken]{ return clientBroken; }
+            )
+        );
+    }
+    EXPECT_TRUE(clientBrokenGracefully);
+    const auto serverSideId = SystemAbstractions::sprintf(
+        "127.0.0.1:%" PRIu16,
+        port
+    );
+    const auto clientSideId = SystemAbstractions::sprintf(
+        "127.0.0.1:%" PRIu16,
+        client.GetBoundPort()
+    );
+    ASSERT_EQ(
+        (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpServerNetworkTransport[1]: %s: closing connection with %s",
+                serverSideId.c_str(),
+                clientSideId.c_str()
+            ),
+        }),
+        diagnosticMessages
+    );
+    diagnosticMessages.clear();
+    client.Close(false);
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        EXPECT_TRUE(
+            condition.wait_for(
+                lock,
+                std::chrono::seconds(1),
+                [&serverBreaks]{ return (serverBreaks.size() == 1); }
+            )
+        );
+        EXPECT_FALSE(serverBreaks[0]);
+    }
+    ASSERT_EQ(
+        (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpServerNetworkTransport[1]: %s: connection with %s closed abruptly by peer",
+                serverSideId.c_str(),
+                clientSideId.c_str()
+            ),
+            SystemAbstractions::sprintf(
+                "HttpServerNetworkTransport[1]: %s: closed connection with %s",
+                serverSideId.c_str(),
+                clientSideId.c_str()
+            ),
+        }),
+        diagnosticMessages
+    );
+}
