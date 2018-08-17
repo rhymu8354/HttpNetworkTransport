@@ -632,11 +632,11 @@ TEST_F(HttpServerNetworkTransportTests, ServerBrokenAbruptly) {
 }
 
 TEST_F(HttpServerNetworkTransportTests, ServerBrokenGracefullyClientClosesGracefully) {
-    std::vector< std::shared_ptr< Http::Connection > > connections;
     std::condition_variable condition;
     std::mutex mutex;
     bool connectionReady = false;
     std::vector< bool > serverBreaks;
+    std::vector< std::shared_ptr< Http::Connection > > connections;
     const auto serverBrokenDelegate = [&condition, &mutex, &serverBreaks](bool graceful){
         std::lock_guard< std::mutex > lock(mutex);
         serverBreaks.push_back(graceful);
