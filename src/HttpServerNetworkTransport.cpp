@@ -17,6 +17,29 @@
 namespace {
 
     /**
+     * This is used to make the setting and usage of the delegates
+     * in ConnectionAdapter thread-safe.
+     */
+    struct ConnectionDelegates {
+        /**
+         * This is used to synchronize access to the delegates.
+         */
+        std::recursive_mutex mutex;
+
+        /**
+         * This is the delegate to call whenever data is recevied
+         * from the remote peer.
+         */
+        Http::Connection::DataReceivedDelegate dataReceivedDelegate;
+
+        /**
+         * This is the delegate to call whenever the connection
+         * has been broken.
+         */
+        Http::Connection::BrokenDelegate brokenDelegate;
+    };
+
+    /**
      * This class is an adapter between two related classes in different
      * libraries:
      * - Http::Connection -- the interface required by the HTTP library
@@ -30,27 +53,16 @@ namespace {
         // Properties
 
         /**
-         * This is used to synchronize access to the object.
-         */
-        std::recursive_mutex mutex;
-
-        /**
          * This is the object which is implementing the network
          * connection in terms of the operating system's network APIs.
          */
         std::shared_ptr< SystemAbstractions::NetworkConnection > adaptee;
 
         /**
-         * This is the delegate to call whenever data is recevied
-         * from the remote peer.
+         * This holds onto the user's delegate and makes their setting
+         * and usage thread-safe.
          */
-        DataReceivedDelegate dataReceivedDelegate;
-
-        /**
-         * This is the delegate to call whenever the connection
-         * has been broken.
-         */
-        BrokenDelegate brokenDelegate;
+        std::shared_ptr< ConnectionDelegates > delegates = std::make_shared< ConnectionDelegates >();
 
         // Methods
 
@@ -68,26 +80,19 @@ namespace {
          *     An indication of whether or not the method was
          *     successful is returned.
          */
-        bool WireUpAdaptee(std::weak_ptr< ConnectionAdapter > weakSelf) {
+        bool WireUpAdaptee() {
+            const auto delegatesCopy = delegates;
             return adaptee->Process(
-                [weakSelf](const std::vector< uint8_t >& message){
-                    auto self = weakSelf.lock();
-                    if (self == nullptr) {
-                        return;
-                    }
-                    std::lock_guard< decltype(self->mutex) > lock(self->mutex);
-                    if (self->dataReceivedDelegate != nullptr) {
-                        self->dataReceivedDelegate(message);
+                [delegatesCopy](const std::vector< uint8_t >& message){
+                    std::lock_guard< decltype(delegatesCopy->mutex) > lock(delegatesCopy->mutex);
+                    if (delegatesCopy->dataReceivedDelegate != nullptr) {
+                        delegatesCopy->dataReceivedDelegate(message);
                     }
                 },
-                [weakSelf](bool graceful){
-                    auto self = weakSelf.lock();
-                    if (self == nullptr) {
-                        return;
-                    }
-                    std::lock_guard< decltype(self->mutex) > lock(self->mutex);
-                    if (self->brokenDelegate != nullptr) {
-                        self->brokenDelegate(graceful);
+                [delegatesCopy](bool graceful){
+                    std::lock_guard< decltype(delegatesCopy->mutex) > lock(delegatesCopy->mutex);
+                    if (delegatesCopy->brokenDelegate != nullptr) {
+                        delegatesCopy->brokenDelegate(graceful);
                     }
                 }
             );
@@ -107,13 +112,13 @@ namespace {
         }
 
         virtual void SetDataReceivedDelegate(DataReceivedDelegate newDataReceivedDelegate) override {
-            std::lock_guard< decltype(mutex) > lock(mutex);
-            dataReceivedDelegate = newDataReceivedDelegate;
+            std::lock_guard< decltype(delegates->mutex) > lock(delegates->mutex);
+            delegates->dataReceivedDelegate = newDataReceivedDelegate;
         }
 
         virtual void SetBrokenDelegate(BrokenDelegate newBrokenDelegate) override {
-            std::lock_guard< decltype(mutex) > lock(mutex);
-            brokenDelegate = newBrokenDelegate;
+            std::lock_guard< decltype(delegates->mutex) > lock(delegates->mutex);
+            delegates->brokenDelegate = newBrokenDelegate;
         }
 
         virtual void SendData(const std::vector< uint8_t >& data) override {
@@ -214,7 +219,7 @@ namespace HttpNetworkTransport {
                  * the new connection delegate registers to receive them.
                  */
                 const auto readyDelegate = newConnectionDelegate(adapter);
-                if (!adapter->WireUpAdaptee(adapter)) {
+                if (!adapter->WireUpAdaptee()) {
                     return;
                 }
                 if (readyDelegate != nullptr) {
