@@ -100,6 +100,16 @@ namespace {
 
         // Http::Connection
 
+        virtual std::string GetPeerAddress() override {
+            return SystemAbstractions::sprintf(
+                "%" PRIu8 ".%" PRIu8 ".%" PRIu8 ".%" PRIu8 ,
+                (uint8_t)((adaptee->GetPeerAddress() >> 24) & 0xFF),
+                (uint8_t)((adaptee->GetPeerAddress() >> 16) & 0xFF),
+                (uint8_t)((adaptee->GetPeerAddress() >> 8) & 0xFF),
+                (uint8_t)(adaptee->GetPeerAddress() & 0xFF)
+            );
+        }
+
         virtual std::string GetPeerId() override {
             return SystemAbstractions::sprintf(
                 "%" PRIu8 ".%" PRIu8 ".%" PRIu8 ".%" PRIu8 ":%" PRIu16,

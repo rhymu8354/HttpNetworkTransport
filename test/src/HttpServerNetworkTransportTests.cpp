@@ -213,6 +213,10 @@ TEST_F(HttpServerNetworkTransportTests, DataTransmissionFromClient) {
         );
     }
     ASSERT_EQ(
+        "127.0.0.1",
+        connections[0]->GetPeerAddress()
+    );
+    ASSERT_EQ(
         SystemAbstractions::sprintf(
             "127.0.0.1:%" PRIu16,
             client.GetBoundPort()
