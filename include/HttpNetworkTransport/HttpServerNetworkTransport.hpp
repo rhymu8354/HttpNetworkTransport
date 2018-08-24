@@ -80,7 +80,7 @@ namespace HttpNetworkTransport {
         /**
          * This contains the private properties of the instance.
          */
-        std::unique_ptr< struct Impl > impl_;
+        std::unique_ptr< Impl > impl_;
     };
 
 }
