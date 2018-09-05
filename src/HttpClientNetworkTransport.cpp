@@ -125,6 +125,20 @@ namespace HttpNetworkTransport {
     ) {
         const auto adapter = std::make_shared< ConnectionAdapter >();
         adapter->adaptee = std::make_shared< SystemAbstractions::NetworkConnection >();
+        auto diagnosticsSender = impl_->diagnosticsSender;
+        adapter->adaptee->SubscribeToDiagnostics(
+            [diagnosticsSender](
+                std::string senderName,
+                size_t level,
+                std::string message
+            ){
+                diagnosticsSender->SendDiagnosticInformationString(
+                    level,
+                    senderName + ": " + message
+                );
+            },
+            1
+        );
         const uint32_t address = SystemAbstractions::NetworkConnection::GetAddressOfHost(hostNameOrAddress);
         if (address == 0) {
             return nullptr;
