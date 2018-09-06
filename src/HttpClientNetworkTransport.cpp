@@ -103,7 +103,7 @@ namespace HttpNetworkTransport {
         }
     };
 
-    HttpClientNetworkTransport::~HttpClientNetworkTransport() = default;
+    HttpClientNetworkTransport::~HttpClientNetworkTransport() noexcept = default;
 
     HttpClientNetworkTransport::HttpClientNetworkTransport()
         : impl_(new Impl)

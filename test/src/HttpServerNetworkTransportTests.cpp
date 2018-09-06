@@ -249,7 +249,7 @@ TEST_F(HttpServerNetworkTransportTests, DataTransmissionToClient) {
     std::condition_variable condition;
     std::mutex mutex;
     std::vector< uint8_t > dataReceived;
-    const auto dataReceivedDelegate = [&condition, &mutex, &dataReceived](
+    const auto dataReceivedDelegate = [](
         std::vector< uint8_t > data
     ){
     };
