@@ -567,7 +567,7 @@ TEST_F(HttpServerNetworkTransportTests, ServerBrokenAbruptly) {
                 std::lock_guard< std::mutex > lock(mutex);
                 connections.push_back(connection);
                 condition.notify_all();
-                return [&connections, &condition, &mutex, &connectionReady]{
+                return [&condition, &mutex, &connectionReady]{
                     std::lock_guard< std::mutex > lock(mutex);
                     connectionReady = true;
                     condition.notify_all();
@@ -656,7 +656,7 @@ TEST_F(HttpServerNetworkTransportTests, ServerBrokenGracefullyClientClosesGracef
                 connections.push_back(connection);
                 condition.notify_all();
                 connection->SetBrokenDelegate(serverBrokenDelegate);
-                return [&connections, &condition, &mutex, &connectionReady]{
+                return [&condition, &mutex, &connectionReady]{
                     std::lock_guard< std::mutex > lock(mutex);
                     connectionReady = true;
                     condition.notify_all();
@@ -774,7 +774,7 @@ TEST_F(HttpServerNetworkTransportTests, ServerBrokenGracefullyClientClosesAbrupt
                 connections.push_back(connection);
                 condition.notify_all();
                 connection->SetBrokenDelegate(serverBrokenDelegate);
-                return [&connections, &condition, &mutex, &connectionReady]{
+                return [&condition, &mutex, &connectionReady]{
                     std::lock_guard< std::mutex > lock(mutex);
                     connectionReady = true;
                     condition.notify_all();

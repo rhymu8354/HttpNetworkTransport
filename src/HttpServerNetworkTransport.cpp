@@ -173,7 +173,7 @@ namespace HttpNetworkTransport {
         }
     };
 
-    HttpServerNetworkTransport::~HttpServerNetworkTransport() = default;
+    HttpServerNetworkTransport::~HttpServerNetworkTransport() noexcept = default;
 
     HttpServerNetworkTransport::HttpServerNetworkTransport()
         : impl_(new Impl)
@@ -236,7 +236,7 @@ namespace HttpNetworkTransport {
                     readyDelegate();
                 }
             },
-            [this](
+            [](
                 uint32_t address,
                 uint16_t port,
                 const std::vector< uint8_t >& body
