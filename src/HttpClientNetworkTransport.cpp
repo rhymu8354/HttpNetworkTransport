@@ -23,6 +23,11 @@ namespace {
      *   for sending and receiving data across the transport layer.
      * - SystemAbstractions::NetworkConnection -- the class which implements
      *   a connection object in terms of the operating system's network APIs.
+     *
+     * @note
+     *     A different connection object type can be used if the user
+     *     sets their own custom connection factory function via
+     *     the SetConnectionFactory method.
      */
     struct ConnectionAdapter
         : public Http::Connection
@@ -33,7 +38,7 @@ namespace {
          * This is the object which is implementing the network
          * connection in terms of the operating system's network APIs.
          */
-        std::shared_ptr< SystemAbstractions::NetworkConnection > adaptee;
+        std::shared_ptr< SystemAbstractions::INetworkConnection > adaptee;
 
         // Methods
 
@@ -92,6 +97,11 @@ namespace HttpNetworkTransport {
          */
         std::shared_ptr< SystemAbstractions::DiagnosticsSender > diagnosticsSender;
 
+        /**
+         * This function is used to create new network connections.
+         */
+        ConnectionFactoryFunction connectionFactory;
+
         // Methods
 
         /**
@@ -99,6 +109,12 @@ namespace HttpNetworkTransport {
          */
         Impl()
             : diagnosticsSender(std::make_shared< SystemAbstractions::DiagnosticsSender >("HttpClientNetworkTransport"))
+            , connectionFactory(
+                [](const std::string&){
+                    const auto connection = std::make_shared< SystemAbstractions::NetworkConnection >();
+                    return connection;
+                }
+            )
         {
         }
     };
@@ -117,6 +133,10 @@ namespace HttpNetworkTransport {
         return impl_->diagnosticsSender->SubscribeToDiagnostics(delegate, minLevel);
     }
 
+    void HttpClientNetworkTransport::SetConnectionFactory(ConnectionFactoryFunction connectionFactory) {
+        impl_->connectionFactory = connectionFactory;
+    }
+
     std::shared_ptr< Http::Connection > HttpClientNetworkTransport::Connect(
         const std::string& hostNameOrAddress,
         uint16_t port,
@@ -124,7 +144,7 @@ namespace HttpNetworkTransport {
         Http::Connection::BrokenDelegate brokenDelegate
     ) {
         const auto adapter = std::make_shared< ConnectionAdapter >();
-        adapter->adaptee = std::make_shared< SystemAbstractions::NetworkConnection >();
+        adapter->adaptee = impl_->connectionFactory(hostNameOrAddress);
         auto diagnosticsSender = impl_->diagnosticsSender;
         adapter->adaptee->SubscribeToDiagnostics(
             [diagnosticsSender](

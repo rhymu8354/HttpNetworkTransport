@@ -43,6 +43,67 @@ namespace {
         bool broken = false;
     };
 
+    /**
+     * This is a substitute for a real connection, and used to test
+     * the SetConnectionFactory method of HttpClientNetworkTransport.
+     */
+    struct MockConnection
+        : public SystemAbstractions::INetworkConnection
+    {
+        // Properties
+
+        std::vector< uint8_t > messageSent;
+
+        // Methods
+
+        // SystemAbstractions::INetworkConnection
+
+        virtual SystemAbstractions::DiagnosticsSender::UnsubscribeDelegate SubscribeToDiagnostics(
+            SystemAbstractions::DiagnosticsSender::DiagnosticMessageDelegate delegate,
+            size_t minLevel = 0
+        ) override {
+            return []{};
+        }
+
+        virtual bool Connect(uint32_t peerAddress, uint16_t peerPort) override {
+            return true;
+        }
+
+        virtual bool Process(
+            MessageReceivedDelegate messageReceivedDelegate,
+            BrokenDelegate brokenDelegate
+        ) override {
+            return true;
+        }
+
+        virtual uint32_t GetPeerAddress() const override{
+            return 0;
+        }
+
+        virtual uint16_t GetPeerPort() const override {
+            return 0;
+        }
+
+        virtual bool IsConnected() const override {
+            return true;
+        }
+
+        virtual uint32_t GetBoundAddress() const override {
+            return 0;
+        }
+
+        virtual uint16_t GetBoundPort() const override {
+            return 0;
+        }
+
+        virtual void SendMessage(const std::vector< uint8_t >& message) override {
+            messageSent = message;
+        }
+
+        virtual void Close(bool clean = false) override {
+        }
+    };
+
 }
 
 /**
@@ -417,4 +478,26 @@ TEST_F(HttpClientNetworkTransportTests, ServerSend) {
     clients[0].connection->SendMessage(testData);
     ASSERT_TRUE(AwaitServerData(testData.size()));
     EXPECT_EQ(testData, dataReceived);
+}
+
+TEST_F(HttpClientNetworkTransportTests, SetConnectionFactory) {
+    const auto networkConnection = std::make_shared< MockConnection >();
+    transport.SetConnectionFactory(
+        [networkConnection](const std::string& serverName){
+            return networkConnection;
+        }
+    );
+    const auto httpConnection = transport.Connect(
+        "www.example.com",
+        1234,
+        [](const std::vector< uint8_t >& data){},
+        [](bool graceful){}
+    );
+    const std::string messageAsString("Hello, World!");
+    const std::vector< uint8_t > messageAsVector(
+        messageAsString.begin(),
+        messageAsString.end()
+    );
+    httpConnection->SendData(messageAsVector);
+    EXPECT_EQ(messageAsVector, networkConnection->messageSent);
 }
