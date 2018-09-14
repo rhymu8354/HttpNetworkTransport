@@ -145,6 +145,15 @@ namespace HttpNetworkTransport {
     ) {
         const auto adapter = std::make_shared< ConnectionAdapter >();
         adapter->adaptee = impl_->connectionFactory(hostNameOrAddress);
+        if (adapter->adaptee == nullptr) {
+            impl_->diagnosticsSender->SendDiagnosticInformationFormatted(
+                SystemAbstractions::DiagnosticsSender::Levels::ERROR,
+                "unable to construct connection to '%s:%" PRIu16 "'",
+                hostNameOrAddress.c_str(),
+                port
+            );
+            return nullptr;
+        }
         auto diagnosticsSender = impl_->diagnosticsSender;
         adapter->adaptee->SubscribeToDiagnostics(
             [diagnosticsSender](

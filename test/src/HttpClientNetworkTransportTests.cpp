@@ -501,3 +501,24 @@ TEST_F(HttpClientNetworkTransportTests, SetConnectionFactory) {
     httpConnection->SendData(messageAsVector);
     EXPECT_EQ(messageAsVector, networkConnection->messageSent);
 }
+
+TEST_F(HttpClientNetworkTransportTests, ConnectionFactoryReturnsNullptr) {
+    transport.SetConnectionFactory(
+        [](const std::string& serverName){
+            return nullptr;
+        }
+    );
+    const auto httpConnection = transport.Connect(
+        "www.example.com",
+        1234,
+        [](const std::vector< uint8_t >& data){},
+        [](bool graceful){}
+    );
+    EXPECT_EQ(nullptr, httpConnection);
+    EXPECT_EQ(
+        (std::vector< std::string >{
+            "HttpClientNetworkTransport[10]: unable to construct connection to 'www.example.com:1234'",
+        }),
+        diagnosticMessages
+    );
+}
