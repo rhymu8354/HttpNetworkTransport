@@ -17,6 +17,104 @@
 #include <thread>
 #include <vector>
 
+namespace {
+
+    /**
+     * This is a substitute for a real connection, and used to test
+     * the SetConnectionDecoratorFactory method of HttpServerNetworkTransport.
+     */
+    struct MockConnection
+        : public SystemAbstractions::INetworkConnection
+    {
+        // Properties
+
+        /**
+         * This holds a copy of the last message sent through the connection.
+         */
+        std::vector< uint8_t > messageSent;
+
+        /**
+         * This is used to coordinate events between threads.
+         */
+        std::condition_variable condition;
+
+        /**
+         * This is used to synchronize access to the object.
+         */
+        std::mutex mutex;
+
+        // Methods
+
+        /**
+         * This method waits up to a reasonable amount of time for
+         * a message to be sent through the connection.
+         *
+         * @return
+         *     An indication of whether or not a message was sent
+         *     through the connection within a reasonable amount
+         *     of time is returned.
+         */
+        bool AwaitSendMessage() {
+            std::unique_lock< decltype(mutex) > lock(mutex);
+            return condition.wait_for(
+                lock,
+                std::chrono::milliseconds(100),
+                [this]{ return !messageSent.empty(); }
+            );
+        }
+
+        // SystemAbstractions::INetworkConnection
+
+        virtual SystemAbstractions::DiagnosticsSender::UnsubscribeDelegate SubscribeToDiagnostics(
+            SystemAbstractions::DiagnosticsSender::DiagnosticMessageDelegate delegate,
+            size_t minLevel = 0
+        ) override {
+            return []{};
+        }
+
+        virtual bool Connect(uint32_t peerAddress, uint16_t peerPort) override {
+            return true;
+        }
+
+        virtual bool Process(
+            MessageReceivedDelegate messageReceivedDelegate,
+            BrokenDelegate brokenDelegate
+        ) override {
+            return true;
+        }
+
+        virtual uint32_t GetPeerAddress() const override{
+            return 0;
+        }
+
+        virtual uint16_t GetPeerPort() const override {
+            return 0;
+        }
+
+        virtual bool IsConnected() const override {
+            return true;
+        }
+
+        virtual uint32_t GetBoundAddress() const override {
+            return 0;
+        }
+
+        virtual uint16_t GetBoundPort() const override {
+            return 0;
+        }
+
+        virtual void SendMessage(const std::vector< uint8_t >& message) override {
+            std::lock_guard< decltype(mutex) > lock(mutex);
+            messageSent = message;
+            condition.notify_all();
+        }
+
+        virtual void Close(bool clean = false) override {
+        }
+    };
+
+}
+
 /**
  * This is the test fixture for these tests, providing common
  * setup and teardown for each test.
@@ -865,6 +963,121 @@ TEST_F(HttpServerNetworkTransportTests, ServerBrokenGracefullyClientClosesAbrupt
                 serverSideId.c_str(),
                 clientSideId.c_str()
             ),
+        }),
+        diagnosticMessages
+    );
+}
+
+TEST_F(HttpServerNetworkTransportTests, SetConnectionDecoratorFactory) {
+    const auto decorator = std::make_shared< MockConnection >();
+    std::shared_ptr< SystemAbstractions::INetworkConnection > connectionAdapted;
+    transport.SetConnectionDecoratorFactory(
+        [
+            decorator,
+            &connectionAdapted
+        ](
+            std::shared_ptr< SystemAbstractions::INetworkConnection > connection
+        ){
+            connectionAdapted = connection;
+            return decorator;
+        }
+    );
+    std::vector< std::shared_ptr< Http::Connection > > connections;
+    std::condition_variable condition;
+    std::mutex mutex;
+    ASSERT_TRUE(
+        transport.BindNetwork(
+            0,
+            [&connections, &condition, &mutex](
+                std::shared_ptr< Http::Connection > connection
+            ){
+                std::lock_guard< std::mutex > lock(mutex);
+                connections.push_back(connection);
+                condition.notify_all();
+                return nullptr;
+            }
+        )
+    );
+    const auto port = transport.GetBoundPort();
+    SystemAbstractions::NetworkConnection client;
+    ASSERT_TRUE(
+        client.Connect(
+            0x7F000001,
+            port
+        )
+    );
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        ASSERT_TRUE(
+            condition.wait_for(
+                lock,
+                std::chrono::seconds(1),
+                [&connections]{
+                    return !connections.empty();
+                }
+            )
+        );
+    }
+    const std::string messageAsString = "Hello, World!";
+    const std::vector< uint8_t > messageAsBytes(
+        messageAsString.begin(),
+        messageAsString.end()
+    );
+    connections[0]->SendData(messageAsBytes);
+    EXPECT_TRUE(decorator->AwaitSendMessage());
+    ASSERT_EQ(messageAsBytes, decorator->messageSent);
+}
+
+TEST_F(HttpServerNetworkTransportTests, ConnectionDecoratorFactoryReturnsNullptr) {
+    transport.SetConnectionDecoratorFactory(
+        [](
+            std::shared_ptr< SystemAbstractions::INetworkConnection > connection
+        ){
+            return nullptr;
+        }
+    );
+    std::vector< std::shared_ptr< Http::Connection > > connections;
+    std::condition_variable condition;
+    std::mutex mutex;
+    ASSERT_TRUE(
+        transport.BindNetwork(
+            0,
+            [&connections, &condition, &mutex](
+                std::shared_ptr< Http::Connection > connection
+            ){
+                std::lock_guard< std::mutex > lock(mutex);
+                connections.push_back(connection);
+                condition.notify_all();
+                return nullptr;
+            }
+        )
+    );
+    const auto port = transport.GetBoundPort();
+    SystemAbstractions::NetworkConnection client;
+    ASSERT_TRUE(
+        client.Connect(
+            0x7F000001,
+            port
+        )
+    );
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        EXPECT_FALSE(
+            condition.wait_for(
+                lock,
+                std::chrono::milliseconds(100),
+                [&connections]{
+                    return !connections.empty();
+                }
+            )
+        );
+    }
+    EXPECT_EQ(
+        (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpServerNetworkTransport[10]: unable to construct decorator for connection from '127.0.0.1:%" PRIu16 "'",
+                client.GetBoundPort()
+            )
         }),
         diagnosticMessages
     );

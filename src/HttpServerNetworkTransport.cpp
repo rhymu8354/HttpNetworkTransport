@@ -56,7 +56,7 @@ namespace {
          * This is the object which is implementing the network
          * connection in terms of the operating system's network APIs.
          */
-        std::shared_ptr< SystemAbstractions::NetworkConnection > adaptee;
+        std::shared_ptr< SystemAbstractions::INetworkConnection > adaptee;
 
         /**
          * This holds onto the user's delegate and makes their setting
@@ -162,6 +162,11 @@ namespace HttpNetworkTransport {
          */
         std::shared_ptr< SystemAbstractions::DiagnosticsSender > diagnosticsSender;
 
+        /**
+         * This function is used to decorate new network connections.
+         */
+        ConnectionDecoratorFactoryFunction connectionDecoratorFactory;
+
         // Methods
 
         /**
@@ -169,6 +174,11 @@ namespace HttpNetworkTransport {
          */
         Impl()
             : diagnosticsSender(std::make_shared< SystemAbstractions::DiagnosticsSender >("HttpServerNetworkTransport"))
+            , connectionDecoratorFactory(
+                [](std::shared_ptr< SystemAbstractions::INetworkConnection > connection){
+                    return connection;
+                }
+            )
         {
         }
     };
@@ -187,6 +197,10 @@ namespace HttpNetworkTransport {
         return impl_->diagnosticsSender->SubscribeToDiagnostics(delegate, minLevel);
     }
 
+    void HttpServerNetworkTransport::SetConnectionDecoratorFactory(ConnectionDecoratorFactoryFunction connectionDecoratorFactory) {
+        impl_->connectionDecoratorFactory = connectionDecoratorFactory;
+    }
+
     bool HttpServerNetworkTransport::BindNetwork(
         uint16_t port,
         NewConnectionDelegate newConnectionDelegate
@@ -196,8 +210,25 @@ namespace HttpNetworkTransport {
                 this,
                 newConnectionDelegate
             ](std::shared_ptr< SystemAbstractions::NetworkConnection > newConnection){
+                const auto peerId = SystemAbstractions::sprintf(
+                    "%" PRIu8 ".%" PRIu8 ".%" PRIu8 ".%" PRIu8 ":%" PRIu16,
+                    (uint8_t)((newConnection->GetPeerAddress() >> 24) & 0xFF),
+                    (uint8_t)((newConnection->GetPeerAddress() >> 16) & 0xFF),
+                    (uint8_t)((newConnection->GetPeerAddress() >> 8) & 0xFF),
+                    (uint8_t)(newConnection->GetPeerAddress() & 0xFF),
+                    newConnection->GetPeerPort()
+                );
+                const auto newDecoratedConnection = impl_->connectionDecoratorFactory(newConnection);
+                if (newDecoratedConnection == nullptr) {
+                    impl_->diagnosticsSender->SendDiagnosticInformationFormatted(
+                        SystemAbstractions::DiagnosticsSender::Levels::ERROR,
+                        "unable to construct decorator for connection from '%s'",
+                        peerId.c_str()
+                    );
+                    return;
+                }
                 const auto adapter = std::make_shared< ConnectionAdapter >();
-                adapter->adaptee = newConnection;
+                adapter->adaptee = newDecoratedConnection;
                 auto diagnosticsSender = impl_->diagnosticsSender;
                 const auto boundId = SystemAbstractions::sprintf(
                     "%" PRIu8 ".%" PRIu8 ".%" PRIu8 ".%" PRIu8 ":%" PRIu16,

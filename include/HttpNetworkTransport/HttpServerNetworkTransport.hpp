@@ -13,6 +13,7 @@
 #include <memory>
 #include <Http/ServerTransport.hpp>
 #include <SystemAbstractions/DiagnosticsSender.hpp>
+#include <SystemAbstractions/INetworkConnection.hpp>
 
 namespace HttpNetworkTransport {
 
@@ -23,6 +24,24 @@ namespace HttpNetworkTransport {
     class HttpServerNetworkTransport
         : public Http::ServerTransport
     {
+        // Types
+    public:
+        /**
+         * This is the type of function used to decorate new network
+         * connections.
+         *
+         * @param[in] connection
+         *     This is the connection object to decorate.
+         *
+         * @return
+         *     The new decorated connection object is returned.
+         */
+        typedef std::function<
+            std::shared_ptr< SystemAbstractions::INetworkConnection >(
+                std::shared_ptr< SystemAbstractions::INetworkConnection > connection
+            )
+        > ConnectionDecoratorFactoryFunction;
+
         // Lifecycle management
     public:
         ~HttpServerNetworkTransport() noexcept;
@@ -58,6 +77,16 @@ namespace HttpNetworkTransport {
             SystemAbstractions::DiagnosticsSender::DiagnosticMessageDelegate delegate,
             size_t minLevel = 0
         );
+
+        /**
+         * This method is used to set the factory used to decorate new network
+         * connections.  If this method is not called, the new connections
+         * are not decorated at all.
+         *
+         * @param[in] connectionDecoratorFactory
+         *     This is the function to call to decorate new network connections.
+         */
+        void SetConnectionDecoratorFactory(ConnectionDecoratorFactoryFunction connectionDecoratorFactory);
 
         // Http::ServerTransport
     public:
