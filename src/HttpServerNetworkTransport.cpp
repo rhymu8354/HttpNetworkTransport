@@ -230,23 +230,15 @@ namespace HttpNetworkTransport {
                 const auto adapter = std::make_shared< ConnectionAdapter >();
                 adapter->adaptee = newDecoratedConnection;
                 auto diagnosticsSender = impl_->diagnosticsSender;
-                const auto boundId = SystemAbstractions::sprintf(
-                    "%" PRIu8 ".%" PRIu8 ".%" PRIu8 ".%" PRIu8 ":%" PRIu16,
-                    (uint8_t)((adapter->adaptee->GetBoundAddress() >> 24) & 0xFF),
-                    (uint8_t)((adapter->adaptee->GetBoundAddress() >> 16) & 0xFF),
-                    (uint8_t)((adapter->adaptee->GetBoundAddress() >> 8) & 0xFF),
-                    (uint8_t)(adapter->adaptee->GetBoundAddress() & 0xFF),
-                    adapter->adaptee->GetBoundPort()
-                );
                 adapter->adaptee->SubscribeToDiagnostics(
-                    [diagnosticsSender, boundId](
+                    [diagnosticsSender, peerId](
                         std::string senderName,
                         size_t level,
                         std::string message
                     ){
                         diagnosticsSender->SendDiagnosticInformationString(
                             level,
-                            boundId + ": " + message
+                            peerId + ": " + message
                         );
                     },
                     1
