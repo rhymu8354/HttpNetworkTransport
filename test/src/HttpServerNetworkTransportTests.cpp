@@ -43,6 +43,23 @@ namespace {
          */
         std::mutex mutex;
 
+        /**
+         * This flag indicates whether or not the Process method
+         * should return an indication of success.
+         */
+        bool processShouldSucceed = true;
+
+        /**
+         * This flag indicates whether or not the Close method was called.
+         */
+        bool closeCalled = false;
+
+        /**
+         * This flag indicates the value of the "clean" parameter
+         * given to the last call to the Close method.
+         */
+        bool closedCleanly = false;
+
         // Methods
 
         /**
@@ -63,6 +80,23 @@ namespace {
             );
         }
 
+        /**
+         * This method waits up to a reasonable amount of time for
+         * the connection to be closed.
+         *
+         * @return
+         *     An indication of whether or not the connection was closed
+         *     within a reasonable amount of time is returned.
+         */
+        bool AwaitClose() {
+            std::unique_lock< decltype(mutex) > lock(mutex);
+            return condition.wait_for(
+                lock,
+                std::chrono::milliseconds(100),
+                [this]{ return closeCalled; }
+            );
+        }
+
         // SystemAbstractions::INetworkConnection
 
         virtual SystemAbstractions::DiagnosticsSender::UnsubscribeDelegate SubscribeToDiagnostics(
@@ -80,7 +114,7 @@ namespace {
             MessageReceivedDelegate messageReceivedDelegate,
             BrokenDelegate brokenDelegate
         ) override {
-            return true;
+            return processShouldSucceed;
         }
 
         virtual uint32_t GetPeerAddress() const override{
@@ -110,6 +144,10 @@ namespace {
         }
 
         virtual void Close(bool clean = false) override {
+            std::lock_guard< decltype(mutex) > lock(mutex);
+            closeCalled = true;
+            closedCleanly = clean;
+            condition.notify_all();
         }
     };
 
@@ -1050,4 +1088,59 @@ TEST_F(HttpServerNetworkTransportTests, ConnectionDecoratorFactoryReturnsNullptr
         }),
         diagnosticMessages
     );
+}
+
+TEST_F(HttpServerNetworkTransportTests, CloseSentUponFailureToWireUpAdaptee) {
+    const auto decorator = std::make_shared< MockConnection >();
+    decorator->processShouldSucceed = false;
+    std::shared_ptr< SystemAbstractions::INetworkConnection > connectionAdapted;
+    transport.SetConnectionDecoratorFactory(
+        [
+            decorator,
+            &connectionAdapted
+        ](
+            std::shared_ptr< SystemAbstractions::INetworkConnection > connection
+        ){
+            connectionAdapted = connection;
+            return decorator;
+        }
+    );
+    std::vector< std::shared_ptr< Http::Connection > > connections;
+    std::condition_variable condition;
+    std::mutex mutex;
+    ASSERT_TRUE(
+        transport.BindNetwork(
+            0,
+            [&connections, &condition, &mutex](
+                std::shared_ptr< Http::Connection > connection
+            ){
+                std::lock_guard< std::mutex > lock(mutex);
+                connections.push_back(connection);
+                condition.notify_all();
+                return nullptr;
+            }
+        )
+    );
+    const auto port = transport.GetBoundPort();
+    SystemAbstractions::NetworkConnection client;
+    ASSERT_TRUE(
+        client.Connect(
+            0x7F000001,
+            port
+        )
+    );
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        ASSERT_TRUE(
+            condition.wait_for(
+                lock,
+                std::chrono::seconds(1),
+                [&connections]{
+                    return !connections.empty();
+                }
+            )
+        );
+    }
+    ASSERT_TRUE(decorator->AwaitClose());
+    EXPECT_FALSE(decorator->closedCleanly);
 }

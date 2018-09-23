@@ -253,6 +253,7 @@ namespace HttpNetworkTransport {
                  */
                 const auto readyDelegate = newConnectionDelegate(adapter);
                 if (!adapter->WireUpAdaptee()) {
+                    adapter->adaptee->Close(false);
                     return;
                 }
                 if (readyDelegate != nullptr) {
