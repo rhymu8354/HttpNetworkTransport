@@ -411,6 +411,7 @@ struct HttpClientNetworkTransportTests
 
     virtual void TearDown() {
         server.Close();
+        clients.clear();
         if (!transportWasMoved) {
             diagnosticsUnsubscribeDelegate();
         }
