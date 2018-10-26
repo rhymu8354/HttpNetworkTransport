@@ -155,19 +155,7 @@ namespace HttpNetworkTransport {
             return nullptr;
         }
         auto diagnosticsSender = impl_->diagnosticsSender;
-        adapter->adaptee->SubscribeToDiagnostics(
-            [diagnosticsSender](
-                std::string senderName,
-                size_t level,
-                std::string message
-            ){
-                diagnosticsSender->SendDiagnosticInformationString(
-                    level,
-                    senderName + ": " + message
-                );
-            },
-            1
-        );
+        adapter->adaptee->SubscribeToDiagnostics(diagnosticsSender->Chain());
         const uint32_t address = SystemAbstractions::NetworkConnection::GetAddressOfHost(hostNameOrAddress);
         if (address == 0) {
             return nullptr;
