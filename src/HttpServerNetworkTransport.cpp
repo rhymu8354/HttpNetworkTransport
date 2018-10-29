@@ -84,15 +84,23 @@ namespace {
             const auto delegatesCopy = delegates;
             return adaptee->Process(
                 [delegatesCopy](const std::vector< uint8_t >& message){
-                    std::lock_guard< decltype(delegatesCopy->mutex) > lock(delegatesCopy->mutex);
-                    if (delegatesCopy->dataReceivedDelegate != nullptr) {
-                        delegatesCopy->dataReceivedDelegate(message);
+                    Http::Connection::DataReceivedDelegate dataReceivedDelegate;
+                    {
+                        std::lock_guard< decltype(delegatesCopy->mutex) > lock(delegatesCopy->mutex);
+                        dataReceivedDelegate = delegatesCopy->dataReceivedDelegate;
+                    }
+                    if (dataReceivedDelegate != nullptr) {
+                        dataReceivedDelegate(message);
                     }
                 },
                 [delegatesCopy](bool graceful){
-                    std::lock_guard< decltype(delegatesCopy->mutex) > lock(delegatesCopy->mutex);
-                    if (delegatesCopy->brokenDelegate != nullptr) {
-                        delegatesCopy->brokenDelegate(graceful);
+                    Http::Connection::BrokenDelegate brokenDelegate;
+                    {
+                        std::lock_guard< decltype(delegatesCopy->mutex) > lock(delegatesCopy->mutex);
+                        brokenDelegate = delegatesCopy->brokenDelegate;
+                    }
+                    if (brokenDelegate != nullptr) {
+                        brokenDelegate(graceful);
                     }
                 }
             );
