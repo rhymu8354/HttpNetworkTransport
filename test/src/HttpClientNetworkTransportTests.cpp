@@ -182,6 +182,12 @@ struct HttpClientNetworkTransportTests
     Http::Connection::BrokenDelegate brokenDelegate;
 
     /**
+     * If this is not nullptr, then when the dataReceivedDelegate is
+     * called, it will call this function.
+     */
+    std::function< void() > onDataReceivedDelegate;
+
+    /**
      * This is used to wake up threads which may be waiting for some
      * state in the fixture to be changed.
      */
@@ -400,6 +406,9 @@ struct HttpClientNetworkTransportTests
                 data.begin(),
                 data.end()
             );
+            if (onDataReceivedDelegate != nullptr) {
+                onDataReceivedDelegate();
+            }
             waitCondition.notify_all();
         };
         brokenDelegate = [this](bool){
@@ -522,4 +531,48 @@ TEST_F(HttpClientNetworkTransportTests, ConnectionFactoryReturnsNullptr) {
         }),
         diagnosticMessages
     );
+}
+
+TEST_F(HttpClientNetworkTransportTests, ReplaceDelegatesFromDelegateContext) {
+    const auto connection = transport.Connect(
+        "localhost",
+        server.GetBoundPort(),
+        dataReceivedDelegate,
+        brokenDelegate
+    );
+    ASSERT_TRUE(AwaitConnections(1));
+    const auto otherDataReceived = std::make_shared< std::vector< uint8_t > >();;
+    onDataReceivedDelegate = [this, connection, otherDataReceived]{
+        connection->SetDataReceivedDelegate(
+            [this, otherDataReceived](
+                std::vector< uint8_t > data
+            ){
+                otherDataReceived->insert(
+                    otherDataReceived->end(),
+                    data.begin(),
+                    data.end()
+                );
+                waitCondition.notify_all();
+            }
+        );
+    };
+    const std::vector< uint8_t > testData{1, 2, 3, 4, 5};
+    clients[0].connection->SendMessage(testData);
+    ASSERT_TRUE(AwaitServerData(testData.size()));
+    EXPECT_EQ(testData, dataReceived);
+    onDataReceivedDelegate = nullptr;
+    clients[0].connection->SendMessage(testData);
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        ASSERT_TRUE(
+            waitCondition.wait_for(
+                lock,
+                std::chrono::seconds(1),
+                [otherDataReceived]{
+                    return !otherDataReceived->empty();
+                }
+            )
+        );
+    }
+    EXPECT_EQ(testData, *otherDataReceived);
 }
