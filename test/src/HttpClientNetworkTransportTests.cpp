@@ -498,7 +498,7 @@ TEST_F(HttpClientNetworkTransportTests, SetConnectionFactory) {
         }
     );
     const auto httpConnection = transport.Connect(
-        "www.example.com",
+        "localhost",
         1234,
         [](const std::vector< uint8_t >& data){},
         [](bool graceful){}
