@@ -31,6 +31,10 @@ namespace HttpNetworkTransport {
          * This is the type of function used to create new network
          * connections.
          *
+         * @param[in] scheme
+         *     This is the scheme indicated in the URI of the target
+         *     to which to establish a connection.
+         *
          * @param[in] serverName
          *     This is the name of the server to which the transport
          *     wishes to connect.
@@ -40,6 +44,7 @@ namespace HttpNetworkTransport {
          */
         typedef std::function<
             std::shared_ptr< SystemAbstractions::INetworkConnection >(
+                const std::string& scheme,
                 const std::string& serverName
             )
         > ConnectionFactoryFunction;
@@ -92,6 +97,7 @@ namespace HttpNetworkTransport {
         // Http::ClientTransport
     public:
         virtual std::shared_ptr< Http::Connection > Connect(
+            const std::string& scheme,
             const std::string& hostNameOrAddress,
             uint16_t port,
             Http::Connection::DataReceivedDelegate dataReceivedDelegate,

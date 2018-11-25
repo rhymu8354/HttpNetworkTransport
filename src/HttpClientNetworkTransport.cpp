@@ -143,7 +143,10 @@ namespace HttpNetworkTransport {
         Impl()
             : diagnosticsSender(std::make_shared< SystemAbstractions::DiagnosticsSender >("HttpClientNetworkTransport"))
             , connectionFactory(
-                [](const std::string&){
+                [](
+                    const std::string&,
+                    const std::string&
+                ){
                     const auto connection = std::make_shared< SystemAbstractions::NetworkConnection >();
                     return connection;
                 }
@@ -171,13 +174,14 @@ namespace HttpNetworkTransport {
     }
 
     std::shared_ptr< Http::Connection > HttpClientNetworkTransport::Connect(
+        const std::string& scheme,
         const std::string& hostNameOrAddress,
         uint16_t port,
         Http::Connection::DataReceivedDelegate dataReceivedDelegate,
         Http::Connection::BrokenDelegate brokenDelegate
     ) {
         const auto adapter = std::make_shared< ConnectionAdapter >();
-        adapter->adaptee = impl_->connectionFactory(hostNameOrAddress);
+        adapter->adaptee = impl_->connectionFactory(scheme, hostNameOrAddress);
         if (adapter->adaptee == nullptr) {
             impl_->diagnosticsSender->SendDiagnosticInformationFormatted(
                 SystemAbstractions::DiagnosticsSender::Levels::ERROR,

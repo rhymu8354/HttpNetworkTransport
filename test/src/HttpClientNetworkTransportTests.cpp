@@ -429,6 +429,7 @@ struct HttpClientNetworkTransportTests
 
 TEST_F(HttpClientNetworkTransportTests, Connect) {
     const auto connection = transport.Connect(
+        "http",
         "localhost",
         server.GetBoundPort(),
         dataReceivedDelegate,
@@ -440,6 +441,7 @@ TEST_F(HttpClientNetworkTransportTests, Connect) {
 
 TEST_F(HttpClientNetworkTransportTests, BreakClientSide) {
     const auto connection = transport.Connect(
+        "http",
         "localhost",
         server.GetBoundPort(),
         dataReceivedDelegate,
@@ -452,6 +454,7 @@ TEST_F(HttpClientNetworkTransportTests, BreakClientSide) {
 
 TEST_F(HttpClientNetworkTransportTests, BreakServerSide) {
     const auto connection = transport.Connect(
+        "http",
         "localhost",
         server.GetBoundPort(),
         dataReceivedDelegate,
@@ -464,6 +467,7 @@ TEST_F(HttpClientNetworkTransportTests, BreakServerSide) {
 
 TEST_F(HttpClientNetworkTransportTests, ClientSend) {
     const auto connection = transport.Connect(
+        "http",
         "localhost",
         server.GetBoundPort(),
         dataReceivedDelegate,
@@ -478,6 +482,7 @@ TEST_F(HttpClientNetworkTransportTests, ClientSend) {
 
 TEST_F(HttpClientNetworkTransportTests, ServerSend) {
     const auto connection = transport.Connect(
+        "http",
         "localhost",
         server.GetBoundPort(),
         dataReceivedDelegate,
@@ -491,13 +496,23 @@ TEST_F(HttpClientNetworkTransportTests, ServerSend) {
 }
 
 TEST_F(HttpClientNetworkTransportTests, SetConnectionFactory) {
+    std::string schemeReportedToFactory;
     const auto networkConnection = std::make_shared< MockConnection >();
     transport.SetConnectionFactory(
-        [networkConnection](const std::string& serverName){
+        [
+            networkConnection,
+            &schemeReportedToFactory
+        ](
+            const std::string& scheme,
+            const std::string& serverName
+        ){
+            schemeReportedToFactory = scheme;
             return networkConnection;
         }
     );
+    const std::string schemeToRequest = "https";
     const auto httpConnection = transport.Connect(
+        schemeToRequest,
         "localhost",
         1234,
         [](const std::vector< uint8_t >& data){},
@@ -510,15 +525,20 @@ TEST_F(HttpClientNetworkTransportTests, SetConnectionFactory) {
     );
     httpConnection->SendData(messageAsVector);
     EXPECT_EQ(messageAsVector, networkConnection->messageSent);
+    EXPECT_EQ(schemeToRequest, schemeReportedToFactory);
 }
 
 TEST_F(HttpClientNetworkTransportTests, ConnectionFactoryReturnsNullptr) {
     transport.SetConnectionFactory(
-        [](const std::string& serverName){
+        [](
+            const std::string& scheme,
+            const std::string& serverName
+        ){
             return nullptr;
         }
     );
     const auto httpConnection = transport.Connect(
+        "http",
         "www.example.com",
         1234,
         [](const std::vector< uint8_t >& data){},
@@ -535,6 +555,7 @@ TEST_F(HttpClientNetworkTransportTests, ConnectionFactoryReturnsNullptr) {
 
 TEST_F(HttpClientNetworkTransportTests, ReplaceDelegatesFromDelegateContext) {
     const auto connection = transport.Connect(
+        "http",
         "localhost",
         server.GetBoundPort(),
         dataReceivedDelegate,
