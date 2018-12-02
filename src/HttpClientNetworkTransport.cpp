@@ -181,26 +181,30 @@ namespace HttpNetworkTransport {
         Http::Connection::BrokenDelegate brokenDelegate
     ) {
         const auto adapter = std::make_shared< ConnectionAdapter >();
+        const auto peerId = SystemAbstractions::sprintf(
+            "%s:%" PRIu16,
+            hostNameOrAddress.c_str(),
+            port
+        );
         adapter->adaptee = impl_->connectionFactory(scheme, hostNameOrAddress);
         if (adapter->adaptee == nullptr) {
             impl_->diagnosticsSender->SendDiagnosticInformationFormatted(
                 SystemAbstractions::DiagnosticsSender::Levels::ERROR,
-                "unable to construct connection to '%s:%" PRIu16 "'",
-                hostNameOrAddress.c_str(),
-                port
+                "unable to construct connection to '%s'",
+                peerId.c_str()
             );
             return nullptr;
         }
         auto diagnosticsSender = impl_->diagnosticsSender;
         adapter->adaptee->SubscribeToDiagnostics(
-            [diagnosticsSender](
+            [diagnosticsSender, peerId](
                 std::string senderName,
                 size_t level,
                 std::string message
             ){
                 diagnosticsSender->SendDiagnosticInformationString(
                     level,
-                    senderName + ": " + message
+                    peerId + ": " + message
                 );
             },
             1

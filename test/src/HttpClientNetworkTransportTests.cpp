@@ -450,6 +450,15 @@ TEST_F(HttpClientNetworkTransportTests, BreakClientSide) {
     ASSERT_TRUE(AwaitConnections(1));
     connection->Break(false);
     ASSERT_TRUE(AwaitClientBreak(0));
+    EXPECT_EQ(
+        (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpClientNetworkTransport[1]: localhost:%" PRIu16 ": closed connection",
+                server.GetBoundPort()
+            ),
+        }),
+        diagnosticMessages
+    );
 }
 
 TEST_F(HttpClientNetworkTransportTests, BreakServerSide) {
@@ -463,6 +472,19 @@ TEST_F(HttpClientNetworkTransportTests, BreakServerSide) {
     ASSERT_TRUE(AwaitConnections(1));
     clients[0].connection->Close(false);
     ASSERT_TRUE(AwaitServerBreak());
+    EXPECT_EQ(
+        (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpClientNetworkTransport[1]: localhost:%" PRIu16 ": connection closed abruptly by peer",
+                server.GetBoundPort()
+            ),
+            SystemAbstractions::sprintf(
+                "HttpClientNetworkTransport[1]: localhost:%" PRIu16 ": closed connection",
+                server.GetBoundPort()
+            ),
+        }),
+        diagnosticMessages
+    );
 }
 
 TEST_F(HttpClientNetworkTransportTests, ClientSend) {
