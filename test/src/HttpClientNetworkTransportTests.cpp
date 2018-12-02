@@ -439,7 +439,7 @@ TEST_F(HttpClientNetworkTransportTests, Connect) {
     ASSERT_TRUE(AwaitConnections(1));
 }
 
-TEST_F(HttpClientNetworkTransportTests, BreakClientSide) {
+TEST_F(HttpClientNetworkTransportTests, BreakClientSideAbruptly) {
     const auto connection = transport.Connect(
         "http",
         "localhost",
@@ -461,7 +461,29 @@ TEST_F(HttpClientNetworkTransportTests, BreakClientSide) {
     );
 }
 
-TEST_F(HttpClientNetworkTransportTests, BreakServerSide) {
+TEST_F(HttpClientNetworkTransportTests, BreakClientSideGracefully) {
+    const auto connection = transport.Connect(
+        "http",
+        "localhost",
+        server.GetBoundPort(),
+        dataReceivedDelegate,
+        brokenDelegate
+    );
+    ASSERT_TRUE(AwaitConnections(1));
+    connection->Break(true);
+    ASSERT_TRUE(AwaitClientBreak(0));
+    EXPECT_EQ(
+        (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpClientNetworkTransport[1]: localhost:%" PRIu16 ": closing connection",
+                server.GetBoundPort()
+            ),
+        }),
+        diagnosticMessages
+    );
+}
+
+TEST_F(HttpClientNetworkTransportTests, BreakServerSideAbruptly) {
     const auto connection = transport.Connect(
         "http",
         "localhost",
@@ -480,6 +502,28 @@ TEST_F(HttpClientNetworkTransportTests, BreakServerSide) {
             ),
             SystemAbstractions::sprintf(
                 "HttpClientNetworkTransport[1]: localhost:%" PRIu16 ": closed connection",
+                server.GetBoundPort()
+            ),
+        }),
+        diagnosticMessages
+    );
+}
+
+TEST_F(HttpClientNetworkTransportTests, BreakServerSideGracefully) {
+    const auto connection = transport.Connect(
+        "http",
+        "localhost",
+        server.GetBoundPort(),
+        dataReceivedDelegate,
+        brokenDelegate
+    );
+    ASSERT_TRUE(AwaitConnections(1));
+    clients[0].connection->Close(true);
+    ASSERT_TRUE(AwaitServerBreak());
+    EXPECT_EQ(
+        (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpClientNetworkTransport[1]: localhost:%" PRIu16 ": connection closed gracefully by peer",
                 server.GetBoundPort()
             ),
         }),

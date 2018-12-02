@@ -8,6 +8,7 @@
  */
 
 #include <condition_variable>
+#include <future>
 #include <gtest/gtest.h>
 #include <HttpNetworkTransport/HttpServerNetworkTransport.hpp>
 #include <inttypes.h>
@@ -596,7 +597,7 @@ TEST_F(HttpServerNetworkTransportTests, ClientBrokenAbruptly) {
     );
 }
 
-TEST_F(HttpServerNetworkTransportTests, ClientBrokenGracefully) {
+TEST_F(HttpServerNetworkTransportTests, ClientBrokenGracefullyServerClosesAbruptly) {
     std::vector< std::shared_ptr< Http::Connection > > connections;
     std::condition_variable condition;
     std::mutex mutex;
@@ -668,6 +669,109 @@ TEST_F(HttpServerNetworkTransportTests, ClientBrokenGracefully) {
     connections[0]->Break(false);
     ASSERT_EQ(
         (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpServerNetworkTransport[1]: %s: closed connection",
+                clientSideId.c_str()
+            ),
+        }),
+        diagnosticMessages
+    );
+}
+
+TEST_F(HttpServerNetworkTransportTests, ClientBrokenGracefullyServerClosesGracefully) {
+    std::vector< std::shared_ptr< Http::Connection > > connections;
+    std::condition_variable condition;
+    std::mutex mutex;
+    bool broken = false;
+    const auto brokenDelegate = [&condition, &mutex, &broken](bool){
+        std::lock_guard< std::mutex > lock(mutex);
+        broken = true;
+        condition.notify_all();
+    };
+    ASSERT_TRUE(
+        transport.BindNetwork(
+            0,
+            [&connections, &condition, &mutex, brokenDelegate](
+                std::shared_ptr< Http::Connection > connection
+            ){
+                std::lock_guard< std::mutex > lock(mutex);
+                connections.push_back(connection);
+                connection->SetBrokenDelegate(brokenDelegate);
+                condition.notify_all();
+                return nullptr;
+            }
+        )
+    );
+    const auto port = transport.GetBoundPort();
+    SystemAbstractions::NetworkConnection client;
+    (void)client.Connect(0x7F000001, port);
+    const auto finallyClosed = std::make_shared< bool >(false);
+    const auto onFinallyClosed = std::make_shared< std::promise< void > >();
+    auto wasFinallyClosed = onFinallyClosed->get_future();
+    ASSERT_TRUE(
+        client.Process(
+            [](const std::vector< uint8_t >& message){},
+            [
+                onFinallyClosed,
+                finallyClosed
+            ](bool clean){
+                if (
+                    !clean
+                    && !*finallyClosed
+                ) {
+                    *finallyClosed = true;
+                    onFinallyClosed->set_value();
+                }
+            }
+        )
+    );
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        (void)condition.wait_for(
+            lock,
+            std::chrono::seconds(1),
+            [&connections]{
+                return !connections.empty();
+            }
+        );
+    }
+    diagnosticMessages.clear();
+    client.Close(true);
+    {
+        std::unique_lock< std::mutex > lock(mutex);
+        ASSERT_TRUE(
+            condition.wait_for(
+                lock,
+                std::chrono::seconds(10),
+                [&broken]{ return broken; }
+            )
+        );
+    }
+    const auto clientSideId = SystemAbstractions::sprintf(
+        "127.0.0.1:%" PRIu16,
+        client.GetBoundPort()
+    );
+    ASSERT_EQ(
+        (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpServerNetworkTransport[1]: %s: connection closed gracefully by peer",
+                clientSideId.c_str()
+            ),
+        }),
+        diagnosticMessages
+    );
+    diagnosticMessages.clear();
+    connections[0]->Break(true);
+    EXPECT_EQ(
+        std::future_status::ready,
+        wasFinallyClosed.wait_for(std::chrono::milliseconds(100))
+    );
+    ASSERT_EQ(
+        (std::vector< std::string >{
+            SystemAbstractions::sprintf(
+                "HttpServerNetworkTransport[1]: %s: closing connection",
+                clientSideId.c_str()
+            ),
             SystemAbstractions::sprintf(
                 "HttpServerNetworkTransport[1]: %s: closed connection",
                 clientSideId.c_str()
