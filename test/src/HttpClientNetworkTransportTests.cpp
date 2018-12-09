@@ -450,14 +450,13 @@ TEST_F(HttpClientNetworkTransportTests, BreakClientSideAbruptly) {
     ASSERT_TRUE(AwaitConnections(1));
     connection->Break(false);
     ASSERT_TRUE(AwaitClientBreak(0));
+    ASSERT_GE(diagnosticMessages.size(), 1);
     EXPECT_EQ(
-        (std::vector< std::string >{
-            SystemAbstractions::sprintf(
-                "HttpClientNetworkTransport[1]: localhost:%" PRIu16 ": closed connection",
-                server.GetBoundPort()
-            ),
-        }),
-        diagnosticMessages
+        SystemAbstractions::sprintf(
+            "HttpClientNetworkTransport[1]: localhost:%" PRIu16 ": closed connection",
+            server.GetBoundPort()
+        ),
+        diagnosticMessages[0]
     );
 }
 

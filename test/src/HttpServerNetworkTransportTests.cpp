@@ -847,14 +847,13 @@ TEST_F(HttpServerNetworkTransportTests, ServerBrokenAbruptly) {
         "127.0.0.1:%" PRIu16,
         client.GetBoundPort()
     );
-    ASSERT_EQ(
-        (std::vector< std::string >{
-            SystemAbstractions::sprintf(
-                "HttpServerNetworkTransport[1]: %s: closed connection",
-                clientSideId.c_str()
-            ),
-        }),
-        diagnosticMessages
+    ASSERT_GE(diagnosticMessages.size(), 1);
+    EXPECT_EQ(
+        SystemAbstractions::sprintf(
+            "HttpServerNetworkTransport[1]: %s: closed connection",
+            clientSideId.c_str()
+        ),
+        diagnosticMessages[0]
     );
 }
 
