@@ -679,25 +679,27 @@ TEST_F(HttpServerNetworkTransportTests, ClientBrokenGracefullyServerClosesAbrupt
 }
 
 TEST_F(HttpServerNetworkTransportTests, ClientBrokenGracefullyServerClosesGracefully) {
-    std::vector< std::shared_ptr< Http::Connection > > connections;
-    std::condition_variable condition;
-    std::mutex mutex;
-    bool broken = false;
-    const auto brokenDelegate = [&condition, &mutex, &broken](bool){
-        std::lock_guard< std::mutex > lock(mutex);
-        broken = true;
-        condition.notify_all();
+    std::promise< void > gracefullyBroken;
+    std::promise< void > finallyBroken;
+    const auto brokenDelegate = [
+        &gracefullyBroken,
+        &finallyBroken
+    ](bool graceful){
+        if (graceful) {
+            gracefullyBroken.set_value();
+        } else {
+            finallyBroken.set_value();
+        }
     };
+    std::promise< std::shared_ptr< Http::Connection > > connectionPromise;
     ASSERT_TRUE(
         transport.BindNetwork(
             0,
-            [&connections, &condition, &mutex, brokenDelegate](
+            [&connectionPromise, brokenDelegate](
                 std::shared_ptr< Http::Connection > connection
             ){
-                std::lock_guard< std::mutex > lock(mutex);
-                connections.push_back(connection);
                 connection->SetBrokenDelegate(brokenDelegate);
-                condition.notify_all();
+                connectionPromise.set_value(connection);
                 return nullptr;
             }
         )
@@ -705,48 +707,19 @@ TEST_F(HttpServerNetworkTransportTests, ClientBrokenGracefullyServerClosesGracef
     const auto port = transport.GetBoundPort();
     SystemAbstractions::NetworkConnection client;
     (void)client.Connect(0x7F000001, port);
-    const auto finallyClosed = std::make_shared< bool >(false);
-    const auto onFinallyClosed = std::make_shared< std::promise< void > >();
-    auto wasFinallyClosed = onFinallyClosed->get_future();
-    ASSERT_TRUE(
-        client.Process(
-            [](const std::vector< uint8_t >& message){},
-            [
-                onFinallyClosed,
-                finallyClosed
-            ](bool clean){
-                if (
-                    !clean
-                    && !*finallyClosed
-                ) {
-                    *finallyClosed = true;
-                    onFinallyClosed->set_value();
-                }
-            }
-        )
+    const auto processResult = client.Process(
+        [](const std::vector< uint8_t >& message){},
+        [](bool){}
     );
-    {
-        std::unique_lock< std::mutex > lock(mutex);
-        (void)condition.wait_for(
-            lock,
-            std::chrono::seconds(1),
-            [&connections]{
-                return !connections.empty();
-            }
-        );
-    }
+    ASSERT_TRUE(processResult);
+    const auto connection = connectionPromise.get_future().get();
     diagnosticMessages.clear();
     client.Close(true);
-    {
-        std::unique_lock< std::mutex > lock(mutex);
-        ASSERT_TRUE(
-            condition.wait_for(
-                lock,
-                std::chrono::seconds(10),
-                [&broken]{ return broken; }
-            )
-        );
-    }
+    auto wasGracefullyBroken = gracefullyBroken.get_future();
+    ASSERT_EQ(
+        std::future_status::ready,
+        wasGracefullyBroken.wait_for(std::chrono::seconds(1))
+    );
     const auto clientSideId = SystemAbstractions::sprintf(
         "127.0.0.1:%" PRIu16,
         client.GetBoundPort()
@@ -761,10 +734,11 @@ TEST_F(HttpServerNetworkTransportTests, ClientBrokenGracefullyServerClosesGracef
         diagnosticMessages
     );
     diagnosticMessages.clear();
-    connections[0]->Break(true);
+    connection->Break(true);
+    auto wasFinallyBroken = finallyBroken.get_future();
     EXPECT_EQ(
         std::future_status::ready,
-        wasFinallyClosed.wait_for(std::chrono::milliseconds(100))
+        wasFinallyBroken.wait_for(std::chrono::milliseconds(100))
     );
     ASSERT_EQ(
         (std::vector< std::string >{
