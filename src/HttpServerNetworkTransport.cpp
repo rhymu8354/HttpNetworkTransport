@@ -260,6 +260,9 @@ namespace HttpNetworkTransport {
                  * the new connection delegate registers to receive them.
                  */
                 const auto readyDelegate = newConnectionDelegate(adapter);
+                if (!adapter->adaptee->IsConnected()) {
+                    return;
+                }
                 if (!adapter->WireUpAdaptee()) {
                     adapter->adaptee->Close(false);
                     return;

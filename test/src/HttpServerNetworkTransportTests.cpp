@@ -46,6 +46,12 @@ namespace {
 
         /**
          * This flag indicates whether or not the Process method
+         * was called.
+         */
+        bool processCalled = false;
+
+        /**
+         * This flag indicates whether or not the Process method
          * should return an indication of success.
          */
         bool processShouldSucceed = true;
@@ -115,6 +121,7 @@ namespace {
             MessageReceivedDelegate messageReceivedDelegate,
             BrokenDelegate brokenDelegate
         ) override {
+            processCalled = true;
             return processShouldSucceed;
         }
 
@@ -127,7 +134,7 @@ namespace {
         }
 
         virtual bool IsConnected() const override {
-            return true;
+            return !closeCalled;
         }
 
         virtual uint32_t GetBoundAddress() const override {
@@ -1220,4 +1227,38 @@ TEST_F(HttpServerNetworkTransportTests, CloseSentUponFailureToWireUpAdaptee) {
     }
     ASSERT_TRUE(decorator->AwaitClose());
     EXPECT_FALSE(decorator->closedCleanly);
+}
+
+TEST_F(HttpServerNetworkTransportTests, DoNotProcessConnectionIfClosedDuringNewConnectionDelegate) {
+    const auto decorator = std::make_shared< MockConnection >();
+    transport.SetConnectionDecoratorFactory(
+        [
+            decorator
+        ](
+            std::shared_ptr< SystemAbstractions::INetworkConnection > connection
+        ){
+            return decorator;
+        }
+    );
+    ASSERT_TRUE(
+        transport.BindNetwork(
+            0,
+            [](
+                std::shared_ptr< Http::Connection > connection
+            ){
+                connection->Break(false);
+                return nullptr;
+            }
+        )
+    );
+    const auto port = transport.GetBoundPort();
+    SystemAbstractions::NetworkConnection client;
+    ASSERT_TRUE(
+        client.Connect(
+            0x7F000001,
+            port
+        )
+    );
+    transport.ReleaseNetwork();
+    EXPECT_FALSE(decorator->processCalled);
 }
