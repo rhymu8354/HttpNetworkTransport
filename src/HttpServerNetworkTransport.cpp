@@ -188,6 +188,7 @@ namespace HttpNetworkTransport {
                 }
             )
         {
+            endpoint.SubscribeToDiagnostics(diagnosticsSender->Chain());
         }
     };
 
