@@ -228,7 +228,7 @@ struct HttpServerNetworkTransportTests
                     );
                 }
             },
-            0
+            1
         );
     }
 
