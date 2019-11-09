@@ -10,9 +10,9 @@
 #include <HttpNetworkTransport/HttpServerNetworkTransport.hpp>
 #include <inttypes.h>
 #include <mutex>
+#include <StringExtensions/StringExtensions.hpp>
 #include <SystemAbstractions/DiagnosticsSender.hpp>
 #include <SystemAbstractions/NetworkEndpoint.hpp>
-#include <SystemAbstractions/StringExtensions.hpp>
 
 namespace {
 
@@ -109,7 +109,7 @@ namespace {
         // Http::Connection
 
         virtual std::string GetPeerAddress() override {
-            return SystemAbstractions::sprintf(
+            return StringExtensions::sprintf(
                 "%" PRIu8 ".%" PRIu8 ".%" PRIu8 ".%" PRIu8 ,
                 (uint8_t)((adaptee->GetPeerAddress() >> 24) & 0xFF),
                 (uint8_t)((adaptee->GetPeerAddress() >> 16) & 0xFF),
@@ -119,7 +119,7 @@ namespace {
         }
 
         virtual std::string GetPeerId() override {
-            return SystemAbstractions::sprintf(
+            return StringExtensions::sprintf(
                 "%" PRIu8 ".%" PRIu8 ".%" PRIu8 ".%" PRIu8 ":%" PRIu16,
                 (uint8_t)((adaptee->GetPeerAddress() >> 24) & 0xFF),
                 (uint8_t)((adaptee->GetPeerAddress() >> 16) & 0xFF),
@@ -219,7 +219,7 @@ namespace HttpNetworkTransport {
                 this,
                 newConnectionDelegate
             ](std::shared_ptr< SystemAbstractions::NetworkConnection > newConnection){
-                const auto peerId = SystemAbstractions::sprintf(
+                const auto peerId = StringExtensions::sprintf(
                     "%" PRIu8 ".%" PRIu8 ".%" PRIu8 ".%" PRIu8 ":%" PRIu16,
                     (uint8_t)((newConnection->GetPeerAddress() >> 24) & 0xFF),
                     (uint8_t)((newConnection->GetPeerAddress() >> 16) & 0xFF),

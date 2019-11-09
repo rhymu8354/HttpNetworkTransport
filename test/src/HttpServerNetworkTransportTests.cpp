@@ -13,8 +13,8 @@
 #include <HttpNetworkTransport/HttpServerNetworkTransport.hpp>
 #include <inttypes.h>
 #include <mutex>
+#include <StringExtensions/StringExtensions.hpp>
 #include <SystemAbstractions/NetworkConnection.hpp>
-#include <SystemAbstractions/StringExtensions.hpp>
 #include <thread>
 #include <vector>
 
@@ -212,7 +212,7 @@ struct HttpServerNetworkTransportTests
                 std::string message
             ){
                 diagnosticMessages.push_back(
-                    SystemAbstractions::sprintf(
+                    StringExtensions::sprintf(
                         "%s[%zu]: %s",
                         senderName.c_str(),
                         level,
@@ -361,7 +361,7 @@ TEST_F(HttpServerNetworkTransportTests, DataTransmissionFromClient) {
         connections[0]->GetPeerAddress()
     );
     ASSERT_EQ(
-        SystemAbstractions::sprintf(
+        StringExtensions::sprintf(
             "127.0.0.1:%" PRIu16,
             client.GetBoundPort()
         ),
@@ -585,17 +585,17 @@ TEST_F(HttpServerNetworkTransportTests, ClientBrokenAbruptly) {
             )
         );
     }
-    const auto clientSideId = SystemAbstractions::sprintf(
+    const auto clientSideId = StringExtensions::sprintf(
         "127.0.0.1:%" PRIu16,
         client.GetBoundPort()
     );
     ASSERT_EQ(
         (std::vector< std::string >{
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpServerNetworkTransport[1]: %s: connection closed abruptly by peer",
                 clientSideId.c_str()
             ),
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpServerNetworkTransport[1]: %s: closed connection",
                 clientSideId.c_str()
             ),
@@ -659,13 +659,13 @@ TEST_F(HttpServerNetworkTransportTests, ClientBrokenGracefullyServerClosesAbrupt
             )
         );
     }
-    const auto clientSideId = SystemAbstractions::sprintf(
+    const auto clientSideId = StringExtensions::sprintf(
         "127.0.0.1:%" PRIu16,
         client.GetBoundPort()
     );
     ASSERT_EQ(
         (std::vector< std::string >{
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpServerNetworkTransport[1]: %s: connection closed gracefully by peer",
                 clientSideId.c_str()
             ),
@@ -676,7 +676,7 @@ TEST_F(HttpServerNetworkTransportTests, ClientBrokenGracefullyServerClosesAbrupt
     connections[0]->Break(false);
     ASSERT_EQ(
         (std::vector< std::string >{
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpServerNetworkTransport[1]: %s: closed connection",
                 clientSideId.c_str()
             ),
@@ -727,13 +727,13 @@ TEST_F(HttpServerNetworkTransportTests, ClientBrokenGracefullyServerClosesGracef
         std::future_status::ready,
         wasGracefullyBroken.wait_for(std::chrono::seconds(1))
     );
-    const auto clientSideId = SystemAbstractions::sprintf(
+    const auto clientSideId = StringExtensions::sprintf(
         "127.0.0.1:%" PRIu16,
         client.GetBoundPort()
     );
     ASSERT_EQ(
         (std::vector< std::string >{
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpServerNetworkTransport[1]: %s: connection closed gracefully by peer",
                 clientSideId.c_str()
             ),
@@ -749,11 +749,11 @@ TEST_F(HttpServerNetworkTransportTests, ClientBrokenGracefullyServerClosesGracef
     );
     ASSERT_EQ(
         (std::vector< std::string >{
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpServerNetworkTransport[1]: %s: closing connection",
                 clientSideId.c_str()
             ),
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpServerNetworkTransport[1]: %s: closed connection",
                 clientSideId.c_str()
             ),
@@ -824,13 +824,13 @@ TEST_F(HttpServerNetworkTransportTests, ServerBrokenAbruptly) {
         );
     }
     EXPECT_FALSE(brokenGracefully);
-    const auto clientSideId = SystemAbstractions::sprintf(
+    const auto clientSideId = StringExtensions::sprintf(
         "127.0.0.1:%" PRIu16,
         client.GetBoundPort()
     );
     ASSERT_GE(diagnosticMessages.size(), 1);
     EXPECT_EQ(
-        SystemAbstractions::sprintf(
+        StringExtensions::sprintf(
             "HttpServerNetworkTransport[1]: %s: closed connection",
             clientSideId.c_str()
         ),
@@ -907,13 +907,13 @@ TEST_F(HttpServerNetworkTransportTests, ServerBrokenGracefullyClientClosesGracef
         );
     }
     EXPECT_TRUE(clientBrokenGracefully);
-    const auto clientSideId = SystemAbstractions::sprintf(
+    const auto clientSideId = StringExtensions::sprintf(
         "127.0.0.1:%" PRIu16,
         client.GetBoundPort()
     );
     ASSERT_EQ(
         (std::vector< std::string >{
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpServerNetworkTransport[1]: %s: closing connection",
                 clientSideId.c_str()
             ),
@@ -936,11 +936,11 @@ TEST_F(HttpServerNetworkTransportTests, ServerBrokenGracefullyClientClosesGracef
     }
     ASSERT_EQ(
         (std::vector< std::string >{
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpServerNetworkTransport[1]: %s: connection closed gracefully by peer",
                 clientSideId.c_str()
             ),
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpServerNetworkTransport[1]: %s: closed connection",
                 clientSideId.c_str()
             ),
@@ -1018,13 +1018,13 @@ TEST_F(HttpServerNetworkTransportTests, ServerBrokenGracefullyClientClosesAbrupt
         );
     }
     EXPECT_TRUE(clientBrokenGracefully);
-    const auto clientSideId = SystemAbstractions::sprintf(
+    const auto clientSideId = StringExtensions::sprintf(
         "127.0.0.1:%" PRIu16,
         client.GetBoundPort()
     );
     ASSERT_EQ(
         (std::vector< std::string >{
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpServerNetworkTransport[1]: %s: closing connection",
                 clientSideId.c_str()
             ),
@@ -1046,11 +1046,11 @@ TEST_F(HttpServerNetworkTransportTests, ServerBrokenGracefullyClientClosesAbrupt
     }
     ASSERT_EQ(
         (std::vector< std::string >{
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpServerNetworkTransport[1]: %s: connection closed abruptly by peer",
                 clientSideId.c_str()
             ),
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpServerNetworkTransport[1]: %s: closed connection",
                 clientSideId.c_str()
             ),
@@ -1165,7 +1165,7 @@ TEST_F(HttpServerNetworkTransportTests, ConnectionDecoratorFactoryReturnsNullptr
     }
     EXPECT_EQ(
         (std::vector< std::string >{
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpServerNetworkTransport[10]: unable to construct decorator for connection from '127.0.0.1:%" PRIu16 "'",
                 client.GetBoundPort()
             )

@@ -13,8 +13,8 @@
 #include <inttypes.h>
 #include <mutex>
 #include <stdint.h>
+#include <StringExtensions/StringExtensions.hpp>
 #include <SystemAbstractions/NetworkEndpoint.hpp>
-#include <SystemAbstractions/StringExtensions.hpp>
 #include <thread>
 #include <vector>
 
@@ -332,7 +332,7 @@ struct HttpClientNetworkTransportTests
                 std::string message
             ){
                 diagnosticMessages.push_back(
-                    SystemAbstractions::sprintf(
+                    StringExtensions::sprintf(
                         "%s[%zu]: %s",
                         senderName.c_str(),
                         level,
@@ -452,7 +452,7 @@ TEST_F(HttpClientNetworkTransportTests, BreakClientSideAbruptly) {
     ASSERT_TRUE(AwaitClientBreak(0));
     ASSERT_GE(diagnosticMessages.size(), 1);
     EXPECT_EQ(
-        SystemAbstractions::sprintf(
+        StringExtensions::sprintf(
             "HttpClientNetworkTransport[1]: localhost:%" PRIu16 ": closed connection",
             server.GetBoundPort()
         ),
@@ -473,7 +473,7 @@ TEST_F(HttpClientNetworkTransportTests, BreakClientSideGracefully) {
     ASSERT_TRUE(AwaitClientBreak(0));
     EXPECT_EQ(
         (std::vector< std::string >{
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpClientNetworkTransport[1]: localhost:%" PRIu16 ": closing connection",
                 server.GetBoundPort()
             ),
@@ -495,11 +495,11 @@ TEST_F(HttpClientNetworkTransportTests, BreakServerSideAbruptly) {
     ASSERT_TRUE(AwaitServerBreak());
     EXPECT_EQ(
         (std::vector< std::string >{
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpClientNetworkTransport[1]: localhost:%" PRIu16 ": connection closed abruptly by peer",
                 server.GetBoundPort()
             ),
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpClientNetworkTransport[1]: localhost:%" PRIu16 ": closed connection",
                 server.GetBoundPort()
             ),
@@ -521,7 +521,7 @@ TEST_F(HttpClientNetworkTransportTests, BreakServerSideGracefully) {
     ASSERT_TRUE(AwaitServerBreak());
     EXPECT_EQ(
         (std::vector< std::string >{
-            SystemAbstractions::sprintf(
+            StringExtensions::sprintf(
                 "HttpClientNetworkTransport[1]: localhost:%" PRIu16 ": connection closed gracefully by peer",
                 server.GetBoundPort()
             ),
