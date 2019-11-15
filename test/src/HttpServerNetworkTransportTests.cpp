@@ -2,7 +2,7 @@
  * @file HttpServerNetworkTransportTests.cpp
  *
  * This module contains the unit tests of the
- * Http::Server class.
+ * HttpNetworkTransport::HttpServerNetworkTransport class.
  *
  * © 2018 by Richard Walters
  */
